@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  background-color: var(--figma-color-bg);
+  color: var(--figma-color-text);
+  overflow: hidden;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--figma-color-bg-tertiary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--figma-color-text-tertiary);
+}
+
+/* Custom utility classes for Figma plugin */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium rounded transition-colors;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-1;
+  }
+
+  .btn-primary {
+    @apply bg-figma-bg-brand text-figma-text-onbrand;
+    @apply hover:bg-figma-bg-brand-hover active:bg-figma-bg-brand-pressed;
+    @apply focus:ring-figma-border-selected;
+  }
+
+  .btn-secondary {
+    @apply bg-figma-bg-secondary text-figma-text border border-figma-border-strong;
+    @apply hover:bg-figma-bg-hover active:bg-figma-bg-pressed;
+    @apply focus:ring-figma-border-selected;
+  }
+
+  .btn-danger {
+    @apply bg-figma-bg-danger text-figma-text-ondanger;
+    @apply hover:bg-figma-bg-danger-hover active:bg-figma-bg-danger-hover;
+    @apply focus:ring-figma-border-danger;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-figma-text;
+    @apply hover:bg-figma-bg-hover active:bg-figma-bg-pressed;
+  }
+
+  .input {
+    @apply w-full px-2 py-1.5 text-sm rounded border;
+    @apply bg-figma-bg text-figma-text border-figma-border-strong;
+    @apply placeholder:text-figma-text-tertiary;
+    @apply focus:outline-none focus:border-figma-border-selected focus:ring-1 focus:ring-figma-border-selected;
+    @apply disabled:bg-figma-bg-disabled disabled:text-figma-text-disabled disabled:cursor-not-allowed;
+  }
+
+  .textarea {
+    @apply input resize-none;
+  }
+
+  .card {
+    @apply bg-figma-bg-secondary rounded-lg p-3;
+  }
+
+  .divider {
+    @apply border-t border-figma-border;
+  }
+}

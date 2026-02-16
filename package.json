@@ -1,0 +1,26 @@
+{
+  "name": "yafai-ai",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "build:primitives": "npm run build -w @yafai/primitives",
+    "build:figma-plugin": "npm run build -w @yafai/figma-plugin",
+    "build:backend": "npm run build -w @yafai/backend",
+    "dev:figma-plugin": "npm run dev -w @yafai/figma-plugin",
+    "dev:backend": "npm run dev -w @yafai/backend",
+    "start:backend": "npm run start -w @yafai/backend",
+    "test": "npm run test --workspaces --if-present",
+    "test:primitives": "npm run test -w @yafai/primitives",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.1.1",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@yafai/backend",
+  "version": "0.1.0",
+  "description": "Backend server for Yafai AI - WebSocket server, chat, and AI agents",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@yafai/primitives": "*",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/websocket": "^11.0.1",
+    "@langchain/core": "^0.3.44",
+    "@langchain/langgraph": "^0.2.68",
+    "@langchain/openai": "^0.5.2",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "uuid": "^11.0.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.3.3"
+  }
+}

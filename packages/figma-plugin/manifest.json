@@ -1,0 +1,13 @@
+{
+  "name": "Yafai AI - Pitch Deck Generator",
+  "id": "yafai-ai-pitch-deck",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["*"],
+    "reasoning": "Connects to Yafai AI backend for AI-powered pitch deck generation"
+  }
+}
