@@ -92,7 +92,7 @@ export function applyAutoLayout(node: FrameNode, frame: Frame): void {
     return;
   }
 
-  // Enable auto-layout
+  // Enable auto-layout (Figma will auto-switch sizing modes to AUTO/hug)
   node.layoutMode = layoutMode;
 
   // Gap / item spacing
@@ -118,14 +118,23 @@ export function applyAutoLayout(node: FrameNode, frame: Frame): void {
   node.primaryAxisAlignItems = primaryAxisAlignToFigma(frame.primaryAxisAlign);
   node.counterAxisAlignItems = counterAxisAlignToFigma(frame.counterAxisAlign);
 
-  // Sizing
+  // Sizing — Figma resets both axes to AUTO (hug) when layoutMode is enabled,
+  // so we must restore FIXED when explicit numeric dimensions were provided.
+  const primaryDim = layoutMode === 'HORIZONTAL' ? frame.width : frame.height;
+  const counterDim = layoutMode === 'HORIZONTAL' ? frame.height : frame.width;
+
   if (frame.primaryAxisSizing) {
     node.primaryAxisSizingMode =
       frame.primaryAxisSizing === 'hug' ? 'AUTO' : 'FIXED';
+  } else if (typeof primaryDim === 'number') {
+    node.primaryAxisSizingMode = 'FIXED';
   }
+
   if (frame.counterAxisSizing) {
     node.counterAxisSizingMode =
       frame.counterAxisSizing === 'hug' ? 'AUTO' : 'FIXED';
+  } else if (typeof counterDim === 'number') {
+    node.counterAxisSizingMode = 'FIXED';
   }
 
   // Wrap
