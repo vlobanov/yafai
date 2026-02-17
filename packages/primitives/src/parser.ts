@@ -12,6 +12,16 @@ import type { Ellipse, Image, Rectangle, Vector } from './primitives/shapes.js';
 import type { Text } from './primitives/text.js';
 
 /**
+ * Warning produced during parsing (non-fatal)
+ */
+export interface ParseWarning {
+  type: 'unknown-attribute';
+  element: string;
+  attribute: string;
+  message: string;
+}
+
+/**
  * Parser options
  */
 export interface ParserOptions {
@@ -20,6 +30,9 @@ export interface ParserOptions {
 
   /** Whether to apply design tokens for shorthand values */
   applyTokens?: boolean;
+
+  /** If provided, unknown-attribute warnings are pushed here */
+  warnings?: ParseWarning[];
 }
 
 /**
@@ -104,7 +117,7 @@ export function parseDSL(xml: string, _options: ParserOptions = {}): Primitive {
     );
   }
 
-  return elementToPrimitive(element);
+  return elementToPrimitive(element, _options.warnings);
 }
 
 /**
@@ -129,7 +142,7 @@ export function parseDSLMultiple(
 
     const element = parseElement(state);
     if (element) {
-      primitives.push(elementToPrimitive(element));
+      primitives.push(elementToPrimitive(element, _options.warnings));
     }
 
     skipWhitespaceAndComments(state);
@@ -417,13 +430,175 @@ function parseElement(state: ParseState): XMLElement | null {
 // PRIMITIVE CONVERSION
 // ═══════════════════════════════════════════════════════════════════════════
 
-function elementToPrimitive(element: XMLElement): Primitive {
+// ═══════════════════════════════════════════════════════════════════════════
+// KNOWN ATTRIBUTES PER ELEMENT (for unknown-attribute warnings)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BASE_ATTRS = [
+  'id',
+  'name',
+  'visible',
+  'opacity',
+  'x',
+  'y',
+  'width',
+  'height',
+  'rotation',
+];
+
+const KNOWN_ATTRIBUTES: Record<string, Set<string>> = {
+  frame: new Set([
+    ...BASE_ATTRS,
+    'fill',
+    'stroke',
+    'strokeWeight',
+    'cornerRadius',
+    'layoutMode',
+    'gap',
+    'itemSpacing',
+    'padding',
+    'paddingTop',
+    'paddingRight',
+    'paddingBottom',
+    'paddingLeft',
+    'primaryAxisAlign',
+    'counterAxisAlign',
+    'primaryAxisSizing',
+    'counterAxisSizing',
+    'layoutWrap',
+    'clipsContent',
+  ]),
+  text: new Set([
+    ...BASE_ATTRS,
+    'text',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'textAlign',
+    'textAlignVertical',
+    'fill',
+    'lineHeight',
+    'letterSpacing',
+    'textAutoResize',
+    'textDecoration',
+    'textCase',
+    'maxLines',
+    'stroke',
+    'strokeWeight',
+  ]),
+  rectangle: new Set([
+    ...BASE_ATTRS,
+    'fill',
+    'stroke',
+    'strokeWeight',
+    'cornerRadius',
+  ]),
+  ellipse: new Set([...BASE_ATTRS, 'fill', 'stroke', 'strokeWeight']),
+  vector: new Set([
+    ...BASE_ATTRS,
+    'path',
+    'svg',
+    'fill',
+    'stroke',
+    'strokeWeight',
+  ]),
+  image: new Set([
+    ...BASE_ATTRS,
+    'imageRef',
+    'src',
+    'scaleMode',
+    'cornerRadius',
+  ]),
+  group: new Set(['id', 'name', 'visible', 'opacity', 'x', 'y']),
+  slide: new Set(['id', 'name', 'x', 'y', 'fill', 'background']),
+  slidetitle: new Set([
+    'id',
+    'name',
+    'x',
+    'y',
+    'text',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fill',
+    'color',
+  ]),
+  card: new Set([
+    'id',
+    'name',
+    'x',
+    'y',
+    'width',
+    'height',
+    'fill',
+    'background',
+    'cornerRadius',
+    'padding',
+    'gap',
+  ]),
+  statnumber: new Set(['id', 'name', 'x', 'y', 'value', 'label']),
+  bulletlist: new Set(['id', 'name', 'x', 'y', 'items']),
+  heading: new Set([
+    'id',
+    'name',
+    'x',
+    'y',
+    'text',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fill',
+    'level',
+  ]),
+  paragraph: new Set([
+    'id',
+    'name',
+    'x',
+    'y',
+    'width',
+    'text',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fill',
+  ]),
+};
+
+function checkUnknownAttributes(
+  element: XMLElement,
+  warnings: ParseWarning[] | undefined,
+): void {
+  if (!warnings) return;
+
   const tag = element.tag.toLowerCase();
+  const known = KNOWN_ATTRIBUTES[tag];
+  if (!known) return;
+
+  for (const attr of Object.keys(element.attributes)) {
+    if (!known.has(attr)) {
+      warnings.push({
+        type: 'unknown-attribute',
+        element: element.tag,
+        attribute: attr,
+        message: `Unknown attribute "${attr}" on <${element.tag}>`,
+      });
+    }
+  }
+}
+
+function elementToPrimitive(
+  element: XMLElement,
+  warnings?: ParseWarning[],
+): Primitive {
+  const tag = element.tag.toLowerCase();
+
+  checkUnknownAttributes(element, warnings);
 
   switch (tag) {
     // Primitives
     case 'frame':
-      return parseFrame(element);
+      return parseFrame(element, warnings);
     case 'text':
       return parseText(element);
     case 'rectangle':
@@ -435,15 +610,15 @@ function elementToPrimitive(element: XMLElement): Primitive {
     case 'image':
       return parseImage(element);
     case 'group':
-      return parseGroup(element);
+      return parseGroup(element, warnings);
 
     // High-level components (expand to primitives)
     case 'slide':
-      return parseSlide(element);
+      return parseSlide(element, warnings);
     case 'slidetitle':
       return parseSlideTitle(element);
     case 'card':
-      return parseCard(element);
+      return parseCard(element, warnings);
     case 'statnumber':
       return parseStatNumber(element);
     case 'bulletlist':
@@ -497,7 +672,10 @@ function parseSizeValue(
   return Number.isNaN(num) ? undefined : num;
 }
 
-function parseFrame(element: XMLElement): Frame {
+function parseFrame(
+  element: XMLElement,
+  warnings?: ParseWarning[],
+): Frame {
   const attrs = element.attributes;
 
   const frame: Frame = {
@@ -524,6 +702,9 @@ function parseFrame(element: XMLElement): Frame {
     paddingLeft: parseNumber(attrs.paddingLeft),
     primaryAxisAlign: attrs.primaryAxisAlign as any,
     counterAxisAlign: attrs.counterAxisAlign as any,
+    primaryAxisSizing: attrs.primaryAxisSizing as Frame['primaryAxisSizing'],
+    counterAxisSizing: attrs.counterAxisSizing as Frame['counterAxisSizing'],
+    layoutWrap: attrs.layoutWrap as Frame['layoutWrap'],
     clipsContent: parseBoolean(attrs.clipsContent),
   };
 
@@ -531,7 +712,7 @@ function parseFrame(element: XMLElement): Frame {
   if (element.children.length > 0) {
     frame.children = element.children
       .filter((c): c is XMLElement => typeof c !== 'string')
-      .map(elementToPrimitive);
+      .map((c) => elementToPrimitive(c, warnings));
   }
 
   return frame;
@@ -652,7 +833,10 @@ function parseImage(element: XMLElement): Image {
   };
 }
 
-function parseGroup(element: XMLElement): Group {
+function parseGroup(
+  element: XMLElement,
+  warnings?: ParseWarning[],
+): Group {
   const attrs = element.attributes;
 
   return {
@@ -665,7 +849,7 @@ function parseGroup(element: XMLElement): Group {
     y: parseNumber(attrs.y),
     children: element.children
       .filter((c): c is XMLElement => typeof c !== 'string')
-      .map(elementToPrimitive),
+      .map((c) => elementToPrimitive(c, warnings)),
   };
 }
 
@@ -676,7 +860,10 @@ function parseGroup(element: XMLElement): Group {
 /**
  * Slide - Base container (1920×1080)
  */
-function parseSlide(element: XMLElement): Frame {
+function parseSlide(
+  element: XMLElement,
+  warnings?: ParseWarning[],
+): Frame {
   const attrs = element.attributes;
 
   return {
@@ -691,7 +878,7 @@ function parseSlide(element: XMLElement): Frame {
     clipsContent: true,
     children: element.children
       .filter((c): c is XMLElement => typeof c !== 'string')
-      .map(elementToPrimitive),
+      .map((c) => elementToPrimitive(c, warnings)),
   };
 }
 
@@ -729,7 +916,10 @@ function parseSlideTitle(element: XMLElement): Text {
 /**
  * Card - Content container with background
  */
-function parseCard(element: XMLElement): Frame {
+function parseCard(
+  element: XMLElement,
+  warnings?: ParseWarning[],
+): Frame {
   const attrs = element.attributes;
 
   return {
@@ -747,7 +937,7 @@ function parseCard(element: XMLElement): Frame {
     gap: parseNumber(attrs.gap) ?? 16,
     children: element.children
       .filter((c): c is XMLElement => typeof c !== 'string')
-      .map(elementToPrimitive),
+      .map((c) => elementToPrimitive(c, warnings)),
   };
 }
 

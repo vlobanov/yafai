@@ -6,8 +6,9 @@ import { resolveIconsInDSL } from '../../services/resolve-icons.js';
 import { slideStore } from '../../services/slide-store.js';
 import { formatViolations, validateSlideRules } from '../../services/validate-slide-rules.js';
 
-export const createSlideTool = tool(
-  async ({ deckId, dsl, source }) => {
+export function createCreateSlideTool(deckId: string) {
+  return tool(
+  async ({ dsl, source }) => {
     // Auto-fix common DSL mistakes
     const preprocessed = preprocessDSL(dsl);
 
@@ -108,7 +109,6 @@ Example DSL (note: every element has an id!):
   </Frame>
 </Slide>`,
     schema: z.object({
-      deckId: z.string().describe('The deck ID to add the slide to'),
       dsl: z
         .string()
         .describe(
@@ -124,3 +124,4 @@ Example DSL (note: every element has an id!):
     }),
   },
 );
+}

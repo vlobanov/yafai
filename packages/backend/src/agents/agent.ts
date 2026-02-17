@@ -1,13 +1,14 @@
+import { MemorySaver } from '@langchain/langgraph-checkpoint';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { config } from '../config.js';
 import { systemPrompt } from './prompts.js';
 import {
-  createSlideTool,
+  createCreateSlideTool,
+  createListComponentsTool,
+  createListSlidesTool,
+  createRegisterComponentTool,
   getSlideTool,
-  listComponentsTool,
-  listSlidesTool,
-  registerComponentTool,
   searchIconsTool,
   updateNodeTool,
   updateSlideTool,
@@ -27,35 +28,36 @@ function createModel() {
 }
 
 /**
- * Custom tools for pitch deck creation
- */
-const tools = [
-  createSlideTool,
-  updateSlideTool,
-  updateNodeTool,
-  listSlidesTool,
-  getSlideTool,
-  registerComponentTool,
-  listComponentsTool,
-  searchIconsTool,
-];
-
-/**
  * Creates the Yafai agent using LangGraph's createReactAgent
  *
- * This is a simple ReAct agent that:
- * - Takes user messages
- * - Decides which tools to call
- * - Executes tools and returns results
+ * Each session gets its own agent with deckId-bound tools so
+ * the LLM never needs to pass deck IDs — they're injected automatically.
+ *
+ * Uses MemorySaver checkpointer so the agent remembers previous turns
+ * within a session (pass thread_id in config when streaming).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createYafaiAgent(): any {
+export function createYafaiAgent(deckId: string): any {
   const model = createModel();
+
+  const tools = [
+    createCreateSlideTool(deckId),
+    updateSlideTool,
+    updateNodeTool,
+    createListSlidesTool(deckId),
+    getSlideTool,
+    createRegisterComponentTool(deckId),
+    createListComponentsTool(deckId),
+    searchIconsTool,
+  ];
+
+  const checkpointer = new MemorySaver();
 
   const agent = createReactAgent({
     llm: model,
     tools,
     messageModifier: systemPrompt,
+    checkpointer,
   });
 
   return agent;

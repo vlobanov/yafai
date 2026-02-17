@@ -48,11 +48,17 @@ interface ValidateMessage {
   nodeId: string;
 }
 
+interface ExportSnapshotMessage {
+  type: 'export-snapshot';
+  slideId: string;
+}
+
 type PluginMessage =
   | RenderMessage
   | RenderBatchMessage
   | RenderDSLMessage
-  | ValidateMessage;
+  | ValidateMessage
+  | ExportSnapshotMessage;
 
 /**
  * Message types from plugin to UI
@@ -69,6 +75,12 @@ interface ValidationResultMessage {
   type: 'validation-result';
   nodeId: string;
   errors: ValidationError[];
+}
+
+interface SnapshotResultMessage {
+  type: 'snapshot-result';
+  slideId: string;
+  imageBase64: string;
 }
 
 interface ValidationError {
@@ -117,6 +129,10 @@ async function handleMessage(msg: PluginMessage) {
 
       case 'validate':
         await handleValidate(msg);
+        break;
+
+      case 'export-snapshot':
+        await handleExportSnapshot(msg);
         break;
 
       default:
@@ -303,24 +319,53 @@ async function handleRenderDSL(msg: RenderDSLMessage) {
       console.log('[Yafai Plugin] Stored slideId in plugin data:', msg.slideId);
     }
 
-    const response: RenderResultMessage = {
+    const response = {
       type: 'render-result',
       success: true,
       nodeId: result.node.id,
+      slideId: msg.slideId,
       warnings: result.warnings,
     };
 
     figma.ui.postMessage(response);
 
-    // Validate the rendered node
-    const errors = validateNode(result.node);
+    // Validate rendered node — skip root slide frame (always 1920×1080 at 0,0)
+    const errors: ValidationError[] = [];
+    if ('children' in result.node) {
+      for (const child of (result.node as FrameNode).children) {
+        errors.push(...validateNode(child));
+      }
+    }
     if (errors.length > 0) {
       console.warn('[Yafai Plugin] Validation errors:', errors);
       figma.ui.postMessage({
         type: 'validation-result',
         nodeId: result.node.id,
+        slideId: msg.slideId,
         errors,
-      } as ValidationResultMessage);
+      });
+    }
+
+    // Export PNG snapshot for agent visual feedback
+    if (msg.slideId) {
+      try {
+        const pngBytes = await result.node.exportAsync({
+          format: 'PNG',
+          constraint: { type: 'SCALE', value: 0.5 },
+        });
+        const base64 = figma.base64Encode(pngBytes);
+        console.log('[Yafai Plugin] Snapshot exported:', {
+          slideId: msg.slideId,
+          sizeKB: Math.round(base64.length * 0.75 / 1024),
+        });
+        figma.ui.postMessage({
+          type: 'snapshot-result',
+          slideId: msg.slideId,
+          imageBase64: base64,
+        } as SnapshotResultMessage);
+      } catch (err) {
+        console.error('[Yafai Plugin] Failed to export snapshot:', err);
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -328,14 +373,50 @@ async function handleRenderDSL(msg: RenderDSLMessage) {
       error: errorMessage,
       dsl: msg.dsl,
     });
-    
-    const response: RenderResultMessage = {
+
+    figma.ui.postMessage({
       type: 'render-result',
       success: false,
+      slideId: msg.slideId,
       error: errorMessage,
-    };
+    });
+  }
+}
 
-    figma.ui.postMessage(response);
+/**
+ * Handle on-demand snapshot export request (from MCP server)
+ */
+async function handleExportSnapshot(msg: ExportSnapshotMessage) {
+  const slideFrame = await findExistingSlide(msg.slideId);
+  if (!slideFrame) {
+    figma.ui.postMessage({
+      type: 'error',
+      message: `Slide not found: ${msg.slideId}`,
+    });
+    return;
+  }
+
+  try {
+    const pngBytes = await slideFrame.exportAsync({
+      format: 'PNG',
+      constraint: { type: 'SCALE', value: 0.5 },
+    });
+    const base64 = figma.base64Encode(pngBytes);
+    console.log('[Yafai Plugin] On-demand snapshot exported:', {
+      slideId: msg.slideId,
+      sizeKB: Math.round(base64.length * 0.75 / 1024),
+    });
+    figma.ui.postMessage({
+      type: 'snapshot-result',
+      slideId: msg.slideId,
+      imageBase64: base64,
+    } as SnapshotResultMessage);
+  } catch (err) {
+    console.error('[Yafai Plugin] Failed to export snapshot:', err);
+    figma.ui.postMessage({
+      type: 'error',
+      message: `Snapshot export failed: ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
 }
 
@@ -360,7 +441,22 @@ async function handleValidate(msg: ValidateMessage) {
     return;
   }
 
-  const errors = validateNode(node as SceneNode);
+  // If the node is a root slide frame, validate only its children
+  // to avoid false-positive safe-zone violations on the 1920×1080 container
+  const sceneNode = node as SceneNode;
+  let errors: ValidationError[];
+
+  if (
+    sceneNode.type === 'FRAME' &&
+    (sceneNode as FrameNode).getPluginData(PLUGIN_DATA_SLIDE_ID)
+  ) {
+    errors = [];
+    for (const child of (sceneNode as FrameNode).children) {
+      errors.push(...validateNode(child));
+    }
+  } else {
+    errors = validateNode(sceneNode);
+  }
 
   figma.ui.postMessage({
     type: 'validation-result',

@@ -16,12 +16,19 @@ const connections = new Map<
   { socket: WebSocket; sessionId: string | null }
 >();
 
-// Agent instance (shared across connections for now)
-let agent: YafaiAgent | null = null;
+// Per-session agent instances (deckId-bound tools)
+const sessionAgents = new Map<string, YafaiAgent>();
 
-function getAgent(): YafaiAgent {
+// Track slides currently under visual review to prevent infinite review loops
+const slidesUnderReview = new Set<string>();
+
+function getAgentForSession(sessionId: string): YafaiAgent {
+  let agent = sessionAgents.get(sessionId);
   if (!agent) {
-    agent = createYafaiAgent();
+    const session = sessionManager.getSession(sessionId);
+    if (!session) throw new Error(`Session ${sessionId} not found`);
+    agent = createYafaiAgent(session.deckId);
+    sessionAgents.set(sessionId, agent);
   }
   return agent;
 }
@@ -78,6 +85,15 @@ export async function handleMessage(
       );
       break;
 
+    case 'snapshot:result':
+      await handleSnapshotResult(
+        socket,
+        message.sessionId,
+        message.slideId,
+        message.imageBase64,
+      );
+      break;
+
     default:
       send(socket, {
         type: 'error',
@@ -111,6 +127,7 @@ async function handleSessionStart(
 
 function handleSessionEnd(connectionId: string, sessionId: string): void {
   sessionManager.deleteSession(sessionId);
+  sessionAgents.delete(sessionId);
 
   const conn = connections.get(connectionId);
   if (conn) {
@@ -144,20 +161,28 @@ async function handleChatMessage(
   });
 
   try {
-    const yafaiAgent = getAgent();
+    const yafaiAgent = getAgentForSession(sessionId);
 
-    // Build the message with deck context
-    const userMessage = new HumanMessage(
-      `[Deck ID: ${session.deckId}]\n\n${content}`,
-    );
+    const userMessage = new HumanMessage(content);
+
+    // Snapshot slide state before agent runs so we know what changed
+    const { slideStore } = await import('../services/slide-store.js');
+    const slidesBefore = slideStore.getSlidesByDeck(session.deckId);
+    const slideCountBefore = slidesBefore.length;
+    const lastUpdatedBefore = slidesBefore.length > 0
+      ? Math.max(...slidesBefore.map(s => s.updatedAt.getTime()))
+      : 0;
 
     // Track tool calls that have been started
     const startedToolCalls = new Set<string>();
 
     // Stream the agent execution to capture tool calls in real-time
-    const stream = await yafaiAgent.stream({
-      messages: [userMessage],
-    });
+    // thread_id links to the MemorySaver checkpointer so the agent
+    // remembers previous turns within this session
+    const stream = await yafaiAgent.stream(
+      { messages: [userMessage] },
+      { configurable: { thread_id: sessionId } },
+    );
 
     let responseContent = '';
 
@@ -242,26 +267,29 @@ async function handleChatMessage(
       } as ServerChatResponse);
     }
 
-    // Check for any slides created
-    const { slideStore } = await import('../services/slide-store.js');
-    const slides = slideStore.getSlidesByDeck(session.deckId);
-    if (slides.length > 0) {
-      const latestSlide = slides[slides.length - 1];
+    // Only send render:slide if slides were actually created or modified
+    const slidesAfter = slideStore.getSlidesByDeck(session.deckId);
+    const lastUpdatedAfter = slidesAfter.length > 0
+      ? Math.max(...slidesAfter.map(s => s.updatedAt.getTime()))
+      : 0;
+
+    if (slidesAfter.length > slideCountBefore || lastUpdatedAfter > lastUpdatedBefore) {
+      // Find the most recently changed slide
+      const changedSlide = slidesAfter.reduce((latest, s) =>
+        s.updatedAt.getTime() > latest.updatedAt.getTime() ? s : latest
+      );
       console.log('[WS] Sending slide for render:', {
-        slideId: latestSlide.id,
-        dslLength: latestSlide.snapshot?.length || 0,
-        dslPreview: latestSlide.snapshot?.slice(0, 200) + '...',
+        slideId: changedSlide.id,
+        dslLength: changedSlide.snapshot?.length || 0,
+        dslPreview: changedSlide.snapshot?.slice(0, 200) + '...',
       });
       send(socket, {
         type: 'render:slide',
         sessionId,
-        slideId: latestSlide.id,
-        dsl: latestSlide.snapshot,
+        slideId: changedSlide.id,
+        dsl: changedSlide.snapshot,
       } as ServerRenderSlide);
     }
-
-    // Store the conversation
-    sessionManager.addMessages(sessionId, [new HumanMessage(content)]);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
@@ -275,6 +303,173 @@ async function handleChatMessage(
       sessionId,
       message: errorMessage,
       code: 'AGENT_ERROR',
+    });
+  }
+}
+
+async function handleSnapshotResult(
+  socket: WebSocket,
+  sessionId: string,
+  slideId: string,
+  imageBase64: string,
+): Promise<void> {
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    console.log(`[WS] Snapshot received for unknown session: ${sessionId}`);
+    return;
+  }
+
+  console.log(`[WS] Snapshot received for slide ${slideId}, size: ${Math.round(imageBase64.length * 0.75 / 1024)}KB`);
+
+  // Prevent infinite review loops: skip if this slide is already being reviewed
+  if (slidesUnderReview.has(slideId)) {
+    console.log(`[WS] Skipping review for slide ${slideId} (already reviewed this cycle)`);
+    return;
+  }
+
+  slidesUnderReview.add(slideId);
+
+  send(socket, {
+    type: 'chat:thinking',
+    sessionId,
+    status: 'Reviewing rendered slide...',
+  });
+
+  try {
+    const yafaiAgent = getAgentForSession(sessionId);
+
+    // Record slide state before review so we can detect if agent made changes
+    const { slideStore } = await import('../services/slide-store.js');
+    const slideBefore = slideStore.getSlide(slideId);
+    const snapshotBefore = slideBefore?.snapshot;
+
+    const currentDsl = slideBefore?.snapshot || '(DSL not available)';
+    const deckId = slideBefore?.deckId || session.deckId;
+
+    const reviewMessage = new HumanMessage({
+      content: [
+        {
+          type: 'text',
+          text: `[Visual Review] Here is a screenshot of slide ${slideId} (deck: ${deckId}) as rendered in Figma.
+
+Current DSL:
+\`\`\`xml
+${currentDsl}
+\`\`\`
+
+Review the screenshot for visual quality — layout, spacing, alignment, readability, and overall aesthetics. Compare what you see in the image against what the DSL intended.
+
+If it looks good, confirm briefly and do NOT call any tools.
+If there are clear visual problems (bad spacing, misalignment, overlapping text, unreadable elements, ugly layout), fix them using update_node (for targeted fixes) or update_slide (for major restructuring). The slide ID is ${slideId} and deck ID is ${deckId}.`,
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:image/png;base64,${imageBase64}`,
+          },
+        },
+      ],
+    });
+
+    const stream = await yafaiAgent.stream(
+      { messages: [reviewMessage] },
+      { configurable: { thread_id: sessionId } },
+    );
+
+    let responseContent = '';
+    const startedToolCalls = new Set<string>();
+
+    for await (const event of stream) {
+      if (event.agent?.messages) {
+        for (const msg of event.agent.messages) {
+          if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+            for (const toolCall of msg.tool_calls) {
+              if (!startedToolCalls.has(toolCall.id)) {
+                startedToolCalls.add(toolCall.id);
+                send(socket, {
+                  type: 'tool:call',
+                  sessionId,
+                  toolCallId: toolCall.id,
+                  toolName: toolCall.name,
+                  args: toolCall.args || {},
+                  status: 'started',
+                } as ServerToolCall);
+              }
+            }
+          }
+
+          if (msg._getType?.() === 'ai' && msg.content) {
+            responseContent =
+              typeof msg.content === 'string'
+                ? msg.content
+                : JSON.stringify(msg.content);
+          }
+        }
+      }
+
+      if (event.tools?.messages) {
+        for (const msg of event.tools.messages) {
+          if (msg._getType?.() === 'tool') {
+            const toolCallId = msg.tool_call_id;
+            const toolName = msg.name;
+            const result =
+              typeof msg.content === 'string'
+                ? msg.content
+                : JSON.stringify(msg.content);
+
+            const isError =
+              result.includes('"success":false') || result.includes('"error"');
+
+            send(socket, {
+              type: 'tool:call',
+              sessionId,
+              toolCallId,
+              toolName,
+              args: {},
+              status: isError ? 'error' : 'completed',
+              result: isError ? undefined : result,
+              error: isError ? result : undefined,
+            } as ServerToolCall);
+          }
+        }
+      }
+    }
+
+    if (responseContent) {
+      send(socket, {
+        type: 'chat:response',
+        sessionId,
+        content: responseContent,
+        isStreaming: false,
+        done: true,
+      } as ServerChatResponse);
+    }
+
+    // Only re-render if the agent actually modified the slide
+    const slideAfter = slideStore.getSlide(slideId);
+    if (slideAfter && slideAfter.snapshot !== snapshotBefore) {
+      console.log(`[WS] Agent modified slide ${slideId} during review, re-rendering`);
+      // Don't clear the review guard — the re-render will trigger another snapshot,
+      // but slidesUnderReview will prevent a second review cycle
+      send(socket, {
+        type: 'render:slide',
+        sessionId,
+        slideId: slideAfter.id,
+        dsl: slideAfter.snapshot,
+      } as ServerRenderSlide);
+    }
+
+    // Clear the guard after everything settles so future renders get reviewed
+    setTimeout(() => slidesUnderReview.delete(slideId), 5000);
+  } catch (error) {
+    slidesUnderReview.delete(slideId);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[WS] Snapshot review error:', errorMessage);
+    send(socket, {
+      type: 'error',
+      sessionId,
+      message: errorMessage,
+      code: 'SNAPSHOT_REVIEW_ERROR',
     });
   }
 }
@@ -318,6 +513,7 @@ export function registerConnection(
 export function unregisterConnection(connectionId: string): void {
   const conn = connections.get(connectionId);
   if (conn?.sessionId) {
+    sessionAgents.delete(conn.sessionId);
     sessionManager.deleteSession(conn.sessionId);
   }
   connections.delete(connectionId);

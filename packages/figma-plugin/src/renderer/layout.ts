@@ -118,14 +118,23 @@ export function applyAutoLayout(node: FrameNode, frame: Frame): void {
   node.primaryAxisAlignItems = primaryAxisAlignToFigma(frame.primaryAxisAlign);
   node.counterAxisAlignItems = counterAxisAlignToFigma(frame.counterAxisAlign);
 
-  // Sizing
+  // Sizing — infer FIXED when explicit dimensions are provided
+  const isVertical = layoutMode === 'VERTICAL';
+  const primaryDim = isVertical ? frame.height : frame.width;
+  const counterDim = isVertical ? frame.width : frame.height;
+
   if (frame.primaryAxisSizing) {
     node.primaryAxisSizingMode =
       frame.primaryAxisSizing === 'hug' ? 'AUTO' : 'FIXED';
+  } else if (typeof primaryDim === 'number') {
+    node.primaryAxisSizingMode = 'FIXED';
   }
+
   if (frame.counterAxisSizing) {
     node.counterAxisSizingMode =
       frame.counterAxisSizing === 'hug' ? 'AUTO' : 'FIXED';
+  } else if (typeof counterDim === 'number') {
+    node.counterAxisSizingMode = 'FIXED';
   }
 
   // Wrap

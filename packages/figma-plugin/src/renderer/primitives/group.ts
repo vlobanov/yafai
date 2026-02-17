@@ -39,7 +39,7 @@ export async function renderGroup(
   const node = figma.group(childNodes, figma.currentPage);
 
   // Apply properties
-  if (group.name) node.name = group.name;
+  if (group.name || group.id) node.name = (group.name || group.id)!;
   if (group.visible !== undefined) node.visible = group.visible;
   if (group.opacity !== undefined) node.opacity = group.opacity;
   if (group.locked !== undefined) node.locked = group.locked;

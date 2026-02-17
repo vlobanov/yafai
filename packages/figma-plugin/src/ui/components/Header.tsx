@@ -15,7 +15,7 @@ export function Header() {
     },
     connected: {
       color: 'bg-figma-bg-success',
-      text: 'Connected',
+      text: 'MCP',
     },
     error: {
       color: 'bg-figma-bg-danger',

@@ -38,7 +38,7 @@ export async function renderFrame(
   const node = figma.createFrame();
 
   // Basic properties
-  if (frame.name) node.name = frame.name;
+  if (frame.name || frame.id) node.name = (frame.name || frame.id)!;
   if (frame.visible !== undefined) node.visible = frame.visible;
   if (frame.opacity !== undefined) node.opacity = frame.opacity;
   if (frame.locked !== undefined) node.locked = frame.locked;

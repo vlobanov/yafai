@@ -29,9 +29,17 @@ export interface ClientSessionEnd {
   sessionId: string;
 }
 
+export interface ClientSnapshotResult {
+  type: 'snapshot:result';
+  sessionId: string;
+  slideId: string;
+  imageBase64: string;
+}
+
 export type ClientMessage =
   | ClientChatMessage
   | ClientValidationResult
+  | ClientSnapshotResult
   | ClientSessionStart
   | ClientSessionEnd;
 

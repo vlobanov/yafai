@@ -1,8 +1,7 @@
 import { useAppStore } from '../store';
-import { ChatIcon, CheckCircleIcon, SettingsIcon } from './Icons';
+import { CheckCircleIcon, SettingsIcon } from './Icons';
 
 const tabs = [
-  { id: 'chat' as const, label: 'Chat', icon: ChatIcon },
   { id: 'validation' as const, label: 'Validation', icon: CheckCircleIcon },
   { id: 'settings' as const, label: 'Settings', icon: SettingsIcon },
 ];

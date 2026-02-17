@@ -31,6 +31,7 @@ function getChildren(node: Primitive): Primitive[] {
  * 2. No white/near-white fill on frames (usually unintentional)
  * 3. No fixed pixel width/height on inner auto-layout frames (root is exempt)
  * 4. No empty spacer frames (use gap instead)
+ * 5. Root frame must use auto-layout (vertical or horizontal), not layoutMode="none"
  */
 export function validateSlideRules(root: Primitive): SlideRuleViolation[] {
   const violations: SlideRuleViolation[] = [];
@@ -50,6 +51,16 @@ export function validateSlideRules(root: Primitive): SlideRuleViolation[] {
     };
 
     const hasAutoLayout = frame.layoutMode && frame.layoutMode !== 'none';
+
+    // Rule 5: root frame must use auto-layout
+    if (isRoot && !hasAutoLayout) {
+      violations.push({
+        nodeId: frame.id,
+        rule: 'root-must-autolayout',
+        message: `Root frame "${frame.id || '(no id)'}" uses layoutMode="none". Children inside a non-auto-layout root default to 100px dimensions, causing text clipping and overlapping elements.`,
+        fix: 'Use layoutMode="vertical" on the root frame with paddingTop/paddingLeft/paddingRight/paddingBottom for margins, and gap for spacing between sections.',
+      });
+    }
 
     // Rule 1: gap={0} on auto-layout frames
     if (hasAutoLayout && frame.gap === 0) {

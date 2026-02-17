@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
-import { wsClient } from '../websocket';
+import { wsClient, DEFAULT_MCP_URL } from '../websocket';
 
 export function SettingsPanel() {
-  const clearMessages = useAppStore((state) => state.clearMessages);
   const clearValidationErrors = useAppStore(
     (state) => state.clearValidationErrors,
   );
@@ -15,7 +14,6 @@ export function SettingsPanel() {
   const [urlInput, setUrlInput] = useState(backendUrl);
 
   const handleClearAll = () => {
-    clearMessages();
     clearValidationErrors();
     clearRenderWarnings();
   };
@@ -68,7 +66,7 @@ export function SettingsPanel() {
         {/* Connection settings */}
         <section>
           <h3 className="text-xs font-medium text-figma-text mb-2">
-            Connection
+            MCP Connection
           </h3>
           <div className="card space-y-3">
             {/* Status indicator */}
@@ -81,13 +79,13 @@ export function SettingsPanel() {
 
             <label className="block">
               <span className="block text-2xs text-figma-text-secondary mb-1">
-                Backend URL
+                Server URL
               </span>
               <input
                 type="text"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="ws://localhost:3001/ws"
+                placeholder={DEFAULT_MCP_URL}
                 className="input text-xs"
               />
             </label>
@@ -151,7 +149,7 @@ export function SettingsPanel() {
               onClick={handleClearAll}
               className="btn btn-secondary w-full"
             >
-              Clear Chat History
+              Clear Validation Data
             </button>
           </div>
         </section>
@@ -162,8 +160,7 @@ export function SettingsPanel() {
           <div className="card">
             <p className="text-xs text-figma-text-secondary">
               Yafai AI helps you create professional pitch decks using AI.
-              Describe your slides in natural language and watch them appear in
-              Figma.
+              Connect via Claude Code MCP to generate slides directly in Figma.
             </p>
             <p className="text-2xs text-figma-text-tertiary mt-2">
               Version 0.1.0

@@ -107,7 +107,7 @@ export async function renderText(
   node.characters = content;
 
   // Basic properties
-  if (text.name) node.name = text.name;
+  if (text.name || text.id) node.name = (text.name || text.id)!;
   if (text.visible !== undefined) node.visible = text.visible;
   if (text.opacity !== undefined) node.opacity = text.opacity;
 

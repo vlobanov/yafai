@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ParseError, parseDSL } from './parser.js';
+import { type ParseWarning, ParseError, parseDSL } from './parser.js';
 
 describe('parseDSL', () => {
   describe('basic primitives', () => {
@@ -383,6 +383,94 @@ describe('parseDSL', () => {
         expect(e).toBeInstanceOf(ParseError);
         expect((e as ParseError).message).toContain('Context');
       }
+    });
+  });
+
+  describe('primaryAxisSizing / counterAxisSizing / layoutWrap parsing', () => {
+    it('parses primaryAxisSizing and counterAxisSizing on Frame', () => {
+      const dsl =
+        '<Frame layoutMode="vertical" primaryAxisSizing="fixed" counterAxisSizing="hug" />';
+      const result = parseDSL(dsl);
+
+      expect(result).toMatchObject({
+        type: 'frame',
+        layoutMode: 'vertical',
+        primaryAxisSizing: 'fixed',
+        counterAxisSizing: 'hug',
+      });
+    });
+
+    it('parses layoutWrap on Frame', () => {
+      const dsl = '<Frame layoutMode="horizontal" layoutWrap="wrap" />';
+      const result = parseDSL(dsl);
+
+      expect(result).toMatchObject({
+        type: 'frame',
+        layoutMode: 'horizontal',
+        layoutWrap: 'wrap',
+      });
+    });
+  });
+
+  describe('unknown attribute warnings', () => {
+    it('produces warnings for unknown attributes when warnings array is passed', () => {
+      const warnings: ParseWarning[] = [];
+      parseDSL(
+        '<Frame width={100} height={200} primaryAxisAlignItems="center" />',
+        { warnings },
+      );
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        type: 'unknown-attribute',
+        element: 'Frame',
+        attribute: 'primaryAxisAlignItems',
+      });
+    });
+
+    it('produces no warnings for known attributes', () => {
+      const warnings: ParseWarning[] = [];
+      parseDSL(
+        '<Frame width={100} height={200} layoutMode="vertical" primaryAxisAlign="center" />',
+        { warnings },
+      );
+
+      expect(warnings).toHaveLength(0);
+    });
+
+    it('produces warnings on nested children', () => {
+      const warnings: ParseWarning[] = [];
+      parseDSL(
+        `<Frame width={100}>
+          <Text fontSize={18} bogusAttr="yes">Hello</Text>
+        </Frame>`,
+        { warnings },
+      );
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        element: 'Text',
+        attribute: 'bogusAttr',
+      });
+    });
+
+    it('produces no warnings when warnings array is not passed', () => {
+      // Should not throw — warnings are simply discarded
+      const result = parseDSL(
+        '<Frame width={100} unknownThing="x" />',
+      );
+      expect(result.type).toBe('frame');
+    });
+
+    it('warns on unknown attributes for high-level components', () => {
+      const warnings: ParseWarning[] = [];
+      parseDSL('<Slide layoutMode="vertical" />', { warnings });
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        element: 'Slide',
+        attribute: 'layoutMode',
+      });
     });
   });
 });

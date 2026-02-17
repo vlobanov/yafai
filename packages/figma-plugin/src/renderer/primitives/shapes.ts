@@ -32,6 +32,7 @@ function applyBaseProps(
     rotation?: number;
   },
   props: {
+    id?: string;
     name?: string;
     visible?: boolean;
     opacity?: number;
@@ -45,7 +46,7 @@ function applyBaseProps(
     effects?: Effect[];
   },
 ): void {
-  if (props.name) node.name = props.name;
+  if (props.name || props.id) node.name = (props.name || props.id)!;
   if (props.visible !== undefined) node.visible = props.visible;
   if (props.opacity !== undefined) node.opacity = props.opacity;
   if (props.locked !== undefined) node.locked = props.locked;
@@ -158,7 +159,7 @@ export async function renderVector(
     // Apply position
     if (vector.x !== undefined) svgNode.x = vector.x;
     if (vector.y !== undefined) svgNode.y = vector.y;
-    if (vector.name) svgNode.name = vector.name;
+    if (vector.name || vector.id) svgNode.name = (vector.name || vector.id)!;
     if (vector.visible !== undefined) svgNode.visible = vector.visible;
     if (vector.opacity !== undefined) svgNode.opacity = vector.opacity;
 
@@ -212,7 +213,7 @@ export async function renderImage(
   // Images in Figma are rectangles with image fills
   const node = figma.createRectangle();
 
-  if (image.name) node.name = image.name;
+  if (image.name || image.id) node.name = (image.name || image.id)!;
   if (image.visible !== undefined) node.visible = image.visible;
   if (image.opacity !== undefined) node.opacity = image.opacity;
 
