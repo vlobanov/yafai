@@ -8,6 +8,7 @@ import {
   listComponentsTool,
   listSlidesTool,
   registerComponentTool,
+  searchIconsTool,
   updateNodeTool,
   updateSlideTool,
 } from './tools/index.js';
@@ -36,6 +37,7 @@ const tools = [
   getSlideTool,
   registerComponentTool,
   listComponentsTool,
+  searchIconsTool,
 ];
 
 /**

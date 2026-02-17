@@ -1,12 +1,24 @@
 import { tool } from '@langchain/core/tools';
 import { collectNodeIds, validateDSL } from '@yafai/primitives';
 import { z } from 'zod';
+import { resolveIconsInDSL } from '../../services/resolve-icons.js';
 import { slideStore } from '../../services/slide-store.js';
 
 export const createSlideTool = tool(
   async ({ deckId, dsl, source }) => {
+    // Resolve <Icon> tags to <Vector> before validation
+    const { resolvedDsl, errors: iconErrors } = resolveIconsInDSL(dsl);
+    if (iconErrors.length > 0) {
+      return JSON.stringify({
+        success: false,
+        error: 'Icon resolution failed',
+        details: iconErrors.join('; '),
+        hint: 'Use search_icons to find valid icon names.',
+      });
+    }
+
     // Validate DSL syntax before accepting
-    const validation = validateDSL(dsl);
+    const validation = validateDSL(resolvedDsl);
     if (!validation.success) {
       return JSON.stringify({
         success: false,
@@ -22,7 +34,7 @@ export const createSlideTool = tool(
     const slide = slideStore.createSlide(
       deckId,
       source || { type: 'Slide', children: [] },
-      dsl,
+      resolvedDsl,
     );
 
     // Return node IDs so the agent knows what can be edited

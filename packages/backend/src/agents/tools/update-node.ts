@@ -10,6 +10,7 @@ import {
   validateDSL,
 } from '@yafai/primitives';
 import { z } from 'zod';
+import { resolveIconsInDSL } from '../../services/resolve-icons.js';
 import { slideStore } from '../../services/slide-store.js';
 
 export const updateNodeTool = tool(
@@ -89,8 +90,20 @@ export const updateNodeTool = tool(
           });
         }
 
+        // Resolve <Icon> tags in replacement DSL
+        const { resolvedDsl: resolvedReplacement, errors: iconErrors } =
+          resolveIconsInDSL(replacement);
+        if (iconErrors.length > 0) {
+          return JSON.stringify({
+            success: false,
+            error: 'Icon resolution failed in replacement DSL',
+            details: iconErrors.join('; '),
+            hint: 'Use search_icons to find valid icon names.',
+          });
+        }
+
         // Parse the replacement DSL
-        const replaceResult = validateDSL(replacement);
+        const replaceResult = validateDSL(resolvedReplacement);
         if (!replaceResult.success || !replaceResult.primitive) {
           return JSON.stringify({
             success: false,
