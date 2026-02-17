@@ -1,13 +1,18 @@
 import { tool } from '@langchain/core/tools';
 import { collectNodeIds, validateDSL } from '@yafai/primitives';
 import { z } from 'zod';
+import { preprocessDSL } from '../../services/preprocess-dsl.js';
 import { resolveIconsInDSL } from '../../services/resolve-icons.js';
 import { slideStore } from '../../services/slide-store.js';
+import { formatViolations, validateSlideRules } from '../../services/validate-slide-rules.js';
 
 export const createSlideTool = tool(
   async ({ deckId, dsl, source }) => {
+    // Auto-fix common DSL mistakes
+    const preprocessed = preprocessDSL(dsl);
+
     // Resolve <Icon> tags to <Vector> before validation
-    const { resolvedDsl, errors: iconErrors } = resolveIconsInDSL(dsl);
+    const { resolvedDsl, errors: iconErrors } = resolveIconsInDSL(preprocessed);
     if (iconErrors.length > 0) {
       return JSON.stringify({
         success: false,
@@ -28,6 +33,17 @@ export const createSlideTool = tool(
         column: validation.column,
         context: validation.context,
         hint: 'Please fix the DSL syntax and try again.',
+      });
+    }
+
+    // Validate slide design rules
+    const violations = validateSlideRules(validation.primitive!);
+    if (violations.length > 0) {
+      return JSON.stringify({
+        success: false,
+        error: 'DSL violates slide design rules',
+        details: formatViolations(violations),
+        hint: 'Fix the issues listed above and try again.',
       });
     }
 
@@ -55,8 +71,11 @@ export const createSlideTool = tool(
 CRITICAL RULES:
 1. EVERY element MUST have a unique id attribute (e.g., id="title", id="stat-revenue")
 2. ALWAYS use layoutMode="vertical" or "horizontal" - NO x/y positioning
-3. Text MUST have width="fill" inside auto-layout containers (prevents clipping)
-4. Containers should use width="hug" / height="hug" to size to content
+3. Use gap for ALL spacing — gap={0} is NEVER correct. Use gap={8}, {16}, {24}, {32}, or {48}. Do NOT create spacer frames.
+4. Use padding on containers for internal margins (padding={24}–{110})
+5. Text MUST have width="fill" inside auto-layout containers (prevents clipping)
+6. Use width="fill" or "hug" on inner frames — NOT fixed pixel widths like width={200}. Only the ROOT frame gets width={1920} height={1080}.
+7. Do NOT add fill="#FFFFFF" to frames. Only use fill on intentional cards (e.g., fill="#F8F8F8" with cornerRadius).
 
 Example DSL (note: every element has an id!):
 <Slide id="slide-market">

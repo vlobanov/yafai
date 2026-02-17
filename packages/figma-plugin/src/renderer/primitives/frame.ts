@@ -57,13 +57,16 @@ export async function renderFrame(
     100, // default height
   );
 
-  // Fills
+  // Fills — Figma defaults new frames to white, so we must explicitly
+  // clear fills when none are specified to make frames transparent.
   if (frame.fill) {
     node.fills = fillsFromColor(frame.fill);
   } else if (frame.fills) {
     // Handle multiple fills - convert from primitive format
     const { primitiveToFigmaPaint } = await import('../colors.js');
     node.fills = frame.fills.map(primitiveToFigmaPaint);
+  } else {
+    node.fills = [];
   }
 
   // Stroke

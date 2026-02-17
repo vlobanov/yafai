@@ -7,7 +7,7 @@ export const config = {
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY || '',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: process.env.MODEL_NAME || 'anthropic/claude-sonnet-4.5',
+    model: process.env.MODEL_NAME || 'anthropic/claude-opus-4.6',
   },
 
   // Agent workspace for file operations

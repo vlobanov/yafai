@@ -10,8 +10,10 @@ import {
   validateDSL,
 } from '@yafai/primitives';
 import { z } from 'zod';
+import { preprocessDSL } from '../../services/preprocess-dsl.js';
 import { resolveIconsInDSL } from '../../services/resolve-icons.js';
 import { slideStore } from '../../services/slide-store.js';
+import { formatViolations, validateSlideRules } from '../../services/validate-slide-rules.js';
 
 export const updateNodeTool = tool(
   async ({ slideId, nodeId, operation, updates, replacement }) => {
@@ -90,9 +92,10 @@ export const updateNodeTool = tool(
           });
         }
 
-        // Resolve <Icon> tags in replacement DSL
+        // Auto-fix and resolve icons in replacement DSL
+        const preprocessedReplacement = preprocessDSL(replacement);
         const { resolvedDsl: resolvedReplacement, errors: iconErrors } =
-          resolveIconsInDSL(replacement);
+          resolveIconsInDSL(preprocessedReplacement);
         if (iconErrors.length > 0) {
           return JSON.stringify({
             success: false,
@@ -112,6 +115,17 @@ export const updateNodeTool = tool(
             line: replaceResult.line,
             column: replaceResult.column,
             context: replaceResult.context,
+          });
+        }
+
+        // Validate slide design rules on replacement subtree
+        const violations = validateSlideRules(replaceResult.primitive);
+        if (violations.length > 0) {
+          return JSON.stringify({
+            success: false,
+            error: 'Replacement DSL violates slide design rules',
+            details: formatViolations(violations),
+            hint: 'Fix the issues listed above and try again.',
           });
         }
 

@@ -58,22 +58,49 @@ ${designTokens}
 ### CRITICAL RULES
 
 1. **ALWAYS use auto-layout** (layoutMode="vertical" or "horizontal") - NO absolute x/y positioning
-2. **Use width="fill" on Text** inside auto-layout so text fills container width and wraps properly
-3. **Use width="hug" / height="hug"** for containers that should size to their content - AVOID fixed widths like width={100}
-4. **Use BOTH vertical AND horizontal layouts** - not everything is a vertical stack! Use horizontal for:
+2. **Use gap for ALL spacing between elements** — gap={0} is NEVER correct. Use real values: gap={8}, gap={16}, gap={24}, gap={32}, gap={48}. Do NOT create empty "spacer" frames — use gap on the parent instead.
+3. **Use padding on containers** — cards, content areas, and the root frame need padding for internal margins. Typical: padding={24}–{110}.
+4. **Use width="fill" on Text** inside auto-layout so text fills container width and wraps properly
+5. **Use width="fill" or width="hug" on inner frames** — do NOT use fixed pixel widths like width={200} or width={400} on inner frames. Use width="fill" to distribute space evenly (e.g., equal-width table columns) or width="hug" to size to content. Fixed width={1920} height={1080} is ONLY for the root content frame.
+6. **Do NOT add fill="#FFFFFF"** or any white/near-white fill to frames. Most frames should be transparent (no fill). Only use fill on intentional cards/containers with a visible background color like fill="#F8F8F8" paired with cornerRadius.
+7. **Use BOTH vertical AND horizontal layouts** - not everything is a vertical stack! Use horizontal for:
    - Side-by-side cards or stats
    - Icon + text rows
    - Multi-column layouts
    - Navigation or button rows
 
-### Sizing Rules (IMPORTANT)
+\`\`\`xml
+<!-- BAD: gap={0} → everything crammed together -->
+<Frame id="stats" layoutMode="vertical" gap={0}>...</Frame>
 
-| Element | Width | Height | When to use |
-|---------|-------|--------|-------------|
-| Text | width="fill" | (auto) | Always inside auto-layout - makes text wrap properly |
-| Card/Container | width="hug" | height="hug" | Content should determine size |
-| Flexible child | width="fill" or layoutGrow={1} | height="fill" | Should expand to fill available space |
-| Fixed element | width={number} | height={number} | Only when exact size is needed (icons, logos) |
+<!-- GOOD: proper spacing -->
+<Frame id="stats" layoutMode="vertical" gap={16}>...</Frame>
+
+<!-- BAD: spacer frames for spacing -->
+<Frame id="section" layoutMode="vertical" gap={0}>
+  <Text id="t1">Title</Text>
+  <Frame id="spacer" width="fill" height={24} />
+  <Text id="t2">Body</Text>
+</Frame>
+
+<!-- GOOD: gap handles spacing -->
+<Frame id="section" layoutMode="vertical" gap={24}>
+  <Text id="t1">Title</Text>
+  <Text id="t2">Body</Text>
+</Frame>
+
+<!-- BAD: fixed pixel widths on inner frames, fill="#FFFFFF" -->
+<Frame id="row" layoutMode="horizontal" gap={0} fill="#FFFFFF">
+  <Frame id="col-1" width={200}>...</Frame>
+  <Frame id="col-2" width={160}>...</Frame>
+</Frame>
+
+<!-- GOOD: fill-based sizing, no unnecessary fill -->
+<Frame id="row" layoutMode="horizontal" gap={24}>
+  <Frame id="col-1" width="fill">...</Frame>
+  <Frame id="col-2" width="fill">...</Frame>
+</Frame>
+\`\`\`
 
 ### Text Inside Auto-Layout
 
@@ -113,15 +140,13 @@ ${designTokens}
 
 <!-- Two-column layout -->
 <Frame layoutMode="horizontal" gap={48} width="fill" height="fill">
-  <!-- Left column - flexible -->
   <Frame layoutMode="vertical" gap={24} width="fill">
     <Text width="fill" fontSize={24} fontWeight={500}>Problem</Text>
     <Text width="fill" fontSize={20} fill="#444444">
       Description of the problem that's long enough to demonstrate proper text wrapping behavior.
     </Text>
   </Frame>
-  <!-- Right column - fixed width -->
-  <Frame layoutMode="vertical" gap={24} width={500}>
+  <Frame layoutMode="vertical" gap={24} width="fill">
     <Frame fill="#F8F8F8" cornerRadius={16} padding={32} width="fill" height="fill" />
   </Frame>
 </Frame>
@@ -268,7 +293,10 @@ You can add icons from the Lucide library to slides. Use \`search_icons\` to fin
 - **Every node must have a unique id attribute** - this enables surgical edits
 - **ALWAYS use auto-layout** - let Figma handle positioning automatically
 - Always use the safe zones (110px margins via padding)
-- Slide dimensions are fixed: 1920×1080, background #F8F9FB
+- Slide dimensions are fixed: 1920×1080, background #F8F9FB — these go on the ROOT content frame ONLY
+- **Use width="fill" or "hug" on inner frames** — not fixed pixel widths. Fixed sizes crop content.
+- **Do NOT use gap={0}** — always use real gap values (8, 16, 24, 32, 48). No spacer frames.
+- **Do NOT add fill="#FFFFFF"** — most frames should be transparent. Only fill on intentional cards.
 - **Titles use LIGHT weight (300)** - this is a key part of the brand
 - Text should fit within containers - don't overflow
 - Use the design token colors for consistency (primary #1D1D1D, accent #DC3C44)

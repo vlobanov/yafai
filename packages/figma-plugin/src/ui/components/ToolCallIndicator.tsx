@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { ToolCall } from '../store';
 import {
   CheckCircleIcon,
+  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CopyIcon,
   LoaderIcon,
   AlertCircleIcon,
   WrenchIcon,
@@ -31,6 +33,32 @@ function formatValue(value: unknown): string {
     return value;
   }
   return JSON.stringify(value, null, 2);
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [text]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="p-0.5 rounded hover:bg-figma-bg-hover text-figma-icon-tertiary hover:text-figma-icon-secondary transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? (
+        <CheckIcon size={12} className="text-figma-icon-success" />
+      ) : (
+        <CopyIcon size={12} />
+      )}
+    </button>
+  );
 }
 
 export function ToolCallIndicator({ toolCall }: ToolCallIndicatorProps) {
@@ -102,8 +130,9 @@ export function ToolCallIndicator({ toolCall }: ToolCallIndicatorProps) {
           {/* Arguments */}
           {hasArgs && (
             <div>
-              <div className="text-2xs font-medium text-figma-text-tertiary mb-1">
-                Arguments
+              <div className="flex items-center justify-between text-2xs font-medium text-figma-text-tertiary mb-1">
+                <span>Arguments</span>
+                <CopyButton text={JSON.stringify(toolCall.args, null, 2)} />
               </div>
               <div className="bg-figma-bg-tertiary rounded p-2 overflow-x-auto">
                 {Object.entries(toolCall.args).map(([key, value]) => (
@@ -123,8 +152,9 @@ export function ToolCallIndicator({ toolCall }: ToolCallIndicatorProps) {
           {/* Result */}
           {toolCall.result && (
             <div>
-              <div className="text-2xs font-medium text-figma-text-tertiary mb-1">
-                Result
+              <div className="flex items-center justify-between text-2xs font-medium text-figma-text-tertiary mb-1">
+                <span>Result</span>
+                <CopyButton text={toolCall.result} />
               </div>
               <div className="bg-figma-bg-tertiary rounded p-2 overflow-x-auto">
                 <pre className="text-2xs text-figma-text-success whitespace-pre-wrap break-all font-mono">
@@ -145,8 +175,9 @@ export function ToolCallIndicator({ toolCall }: ToolCallIndicatorProps) {
           {/* Error */}
           {toolCall.error && (
             <div>
-              <div className="text-2xs font-medium text-figma-text-danger mb-1">
-                Error
+              <div className="flex items-center justify-between text-2xs font-medium text-figma-text-danger mb-1">
+                <span>Error</span>
+                <CopyButton text={toolCall.error} />
               </div>
               <div className="bg-red-50 dark:bg-red-950 rounded p-2 overflow-x-auto">
                 <pre className="text-2xs text-figma-text-danger whitespace-pre-wrap break-all font-mono">

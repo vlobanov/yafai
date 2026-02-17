@@ -71,6 +71,14 @@ export async function render(
     throw new Error('Failed to render primitive - no node created');
   }
 
+  // The root frame is the slide container (1920×1080). Figma resets sizing to
+  // AUTO (hug) when layoutMode is enabled, so we force it back to FIXED here.
+  // Only the root frame needs this — inner frames should default to hug.
+  if (node.type === 'FRAME' && node.layoutMode !== 'NONE') {
+    node.primaryAxisSizingMode = 'FIXED';
+    node.counterAxisSizingMode = 'FIXED';
+  }
+
   // Apply position offset if specified
   if (options.x !== undefined) node.x = options.x;
   if (options.y !== undefined) node.y = options.y;
