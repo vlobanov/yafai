@@ -69,6 +69,29 @@ export type LineHeight = number | `${number}%` | 'auto';
 export type LetterSpacing = number | `${number}%`;
 
 /**
+ * Style overrides for an inline text segment (B, I, U, S, Span)
+ * Undefined fields inherit from the parent Text node.
+ */
+export interface TextSegmentStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: FontWeight;
+  fontStyle?: FontStyle;
+  textDecoration?: TextDecoration;
+  fill?: HexColor;
+  letterSpacing?: LetterSpacing;
+}
+
+/**
+ * A segment of styled text within a Text node.
+ * When `style` is undefined, the segment inherits the parent Text defaults.
+ */
+export interface TextSegment {
+  text: string;
+  style?: TextSegmentStyle;
+}
+
+/**
  * Text-specific properties
  */
 export interface TextProps {
@@ -158,6 +181,13 @@ export interface TextProps {
  */
 export interface Text extends BaseNode, TextProps {
   type: 'text';
+
+  /**
+   * Inline formatted segments (from <B>, <I>, <U>, <S>, <Span> tags).
+   * When present, `text` holds the full concatenated string and
+   * segments describe per-range style overrides for the Figma renderer.
+   */
+  segments?: TextSegment[];
 }
 
 /**

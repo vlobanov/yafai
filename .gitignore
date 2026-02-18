@@ -26,3 +26,7 @@ npm-debug.log*
 
 # Test coverage
 coverage/
+
+# Design working directories (generated files)
+design/screenshots/
+design/slides/

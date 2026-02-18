@@ -25,16 +25,16 @@ export function createMcpServer(bridge: FigmaBridge): McpServer {
     'Create a working session for slide files and snapshots',
     { name: z.string().optional().describe('Session name (default: "default")') },
     async ({ name }) => {
-      const session = sessions.start(name);
+      sessions.start(name);
       return {
         content: [
           {
             type: 'text' as const,
             text: JSON.stringify(
               {
-                session: session.path,
-                slidesDir: session.slidesDir,
-                snapshotsDir: session.snapshotsDir,
+                slidesDir: 'design/slides',
+                snapshotsDir: 'design/screenshots',
+                projectRoot: sessions.getProjectRoot(),
                 figmaConnected: bridge.isConnected(),
               },
               null,
@@ -57,9 +57,7 @@ export function createMcpServer(bridge: FigmaBridge): McpServer {
       slideId: z.string().optional().describe('Slide ID for updates (auto-generated if omitted)'),
     },
     async ({ file, slideId }) => {
-      const resolvedPath = sessions.getCurrent()
-        ? sessions.resolveFilePath(file)
-        : path.resolve(file);
+      const resolvedPath = sessions.resolveFilePath(file);
 
       // Read file
       if (!fs.existsSync(resolvedPath)) {
@@ -85,7 +83,8 @@ export function createMcpServer(bridge: FigmaBridge): McpServer {
         };
       }
 
-      const id = slideId || `slide-${Date.now()}`;
+      // Auto-derive slideId from filename if not provided
+      const id = slideId || path.basename(file, '.xml');
       slides.track(id, resolvedPath);
 
       // Send to Figma
@@ -144,30 +143,25 @@ export function createMcpServer(bridge: FigmaBridge): McpServer {
       try {
         const result = await bridge.takeSnapshot(slideId);
 
-        // Determine save path
-        const session = sessions.getCurrent();
-        const timestamp = Date.now();
-        let savePath: string;
+        // Save to design/screenshots/ under project root
+        const snapshotsDir = path.join(sessions.getProjectRoot(), 'design', 'screenshots');
+        fs.mkdirSync(snapshotsDir, { recursive: true });
 
-        if (session) {
-          savePath = path.join(session.snapshotsDir, `${slideId}-${timestamp}.png`);
-        } else {
-          const dir = path.resolve('./workspace/snapshots');
-          fs.mkdirSync(dir, { recursive: true });
-          savePath = path.join(dir, `${slideId}-${timestamp}.png`);
-        }
+        const timestamp = Date.now();
+        const savePath = path.join(snapshotsDir, `${slideId}-${timestamp}.png`);
 
         // Decode and save
         const buffer = Buffer.from(result.imageBase64, 'base64');
         fs.writeFileSync(savePath, buffer);
 
-        log.info(`Snapshot saved: ${savePath} (${Math.round(buffer.length / 1024)}KB)`);
+        const relativePath = sessions.toProjectRelative(savePath);
+        log.info(`Snapshot saved: ${relativePath} (${Math.round(buffer.length / 1024)}KB)`);
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ slideId, path: savePath, sizeKB: Math.round(buffer.length / 1024) }, null, 2),
+              text: JSON.stringify({ slideId, path: relativePath, sizeKB: Math.round(buffer.length / 1024) }, null, 2),
             },
           ],
         };

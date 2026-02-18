@@ -153,7 +153,7 @@ export const TextSchema: PrimitiveSchema = {
   name: 'Text',
   description: 'Text content with typography styling',
   figmaType: 'TEXT',
-  canHaveChildren: false,
+  canHaveChildren: true, // Supports inline formatting children: <B>, <I>, <U>, <S>, <Span>
   properties: [
     // Base properties
     { name: 'id', type: 'string' },
@@ -172,7 +172,15 @@ export const TextSchema: PrimitiveSchema = {
       name: 'text',
       type: 'string',
       required: true,
-      description: 'Text content (or use children)',
+      description: 'Text content (or use children with inline formatting)',
+    },
+
+    // Inline formatting segments (populated by parser from <B>, <I>, <U>, <S>, <Span> children)
+    {
+      name: 'segments',
+      type: 'array',
+      items: { name: 'segment', type: 'object' },
+      description: 'Styled text segments for range-based formatting',
     },
 
     // Typography

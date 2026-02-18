@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { type ParseWarning, ParseError, parseDSL } from './parser.js';
+import { type ParseWarning, ParseError, parseDSL, serializeDSL } from './parser.js';
+import type { Text } from './primitives/text.js';
 
 describe('parseDSL', () => {
   describe('basic primitives', () => {
@@ -471,6 +472,175 @@ describe('parseDSL', () => {
         element: 'Slide',
         attribute: 'layoutMode',
       });
+    });
+  });
+
+  describe('inline text formatting', () => {
+    it('parses <B> tag', () => {
+      const result = parseDSL('<Text fontSize={16}>Hello <B>world</B></Text>') as Text;
+
+      expect(result.type).toBe('text');
+      expect(result.text).toBe('Hello world');
+      expect(result.segments).toHaveLength(2);
+      expect(result.segments![0]).toEqual({ text: 'Hello ' });
+      expect(result.segments![1]).toEqual({
+        text: 'world',
+        style: { fontWeight: 700 },
+      });
+    });
+
+    it('parses <I> tag', () => {
+      const result = parseDSL('<Text>Hello <I>world</I></Text>') as Text;
+
+      expect(result.text).toBe('Hello world');
+      expect(result.segments![1]).toEqual({
+        text: 'world',
+        style: { fontStyle: 'italic' },
+      });
+    });
+
+    it('parses <U> tag', () => {
+      const result = parseDSL('<Text>Hello <U>world</U></Text>') as Text;
+
+      expect(result.text).toBe('Hello world');
+      expect(result.segments![1]).toEqual({
+        text: 'world',
+        style: { textDecoration: 'underline' },
+      });
+    });
+
+    it('parses <S> tag', () => {
+      const result = parseDSL('<Text>Hello <S>world</S></Text>') as Text;
+
+      expect(result.text).toBe('Hello world');
+      expect(result.segments![1]).toEqual({
+        text: 'world',
+        style: { textDecoration: 'strikethrough' },
+      });
+    });
+
+    it('parses nested <B><I> tags', () => {
+      const result = parseDSL('<Text><B><I>bold italic</I></B></Text>') as Text;
+
+      expect(result.text).toBe('bold italic');
+      expect(result.segments).toHaveLength(1);
+      expect(result.segments![0]).toEqual({
+        text: 'bold italic',
+        style: { fontWeight: 700, fontStyle: 'italic' },
+      });
+    });
+
+    it('parses <Span> with attributes', () => {
+      const result = parseDSL(
+        '<Text>Normal <Span fontWeight={600} fill="#FF0000">custom</Span> text</Text>',
+      ) as Text;
+
+      expect(result.text).toBe('Normal custom text');
+      expect(result.segments).toHaveLength(3);
+      expect(result.segments![0]).toEqual({ text: 'Normal ' });
+      expect(result.segments![1]).toEqual({
+        text: 'custom',
+        style: { fontWeight: 600, fill: '#FF0000' },
+      });
+      expect(result.segments![2]).toEqual({ text: ' text' });
+    });
+
+    it('preserves whitespace: A <B>B</B> C', () => {
+      const result = parseDSL('<Text>A <B>B</B> C</Text>') as Text;
+
+      expect(result.text).toBe('A B C');
+      expect(result.segments).toHaveLength(3);
+      expect(result.segments![0].text).toBe('A ');
+      expect(result.segments![1].text).toBe('B');
+      expect(result.segments![2].text).toBe(' C');
+    });
+
+    it('trims leading/trailing whitespace in inline content', () => {
+      const result = parseDSL(`<Text>
+        Revenue grew <B>150%</B> this year.
+      </Text>`) as Text;
+
+      expect(result.text).toBe('Revenue grew 150% this year.');
+    });
+
+    it('plain text backwards compat - no segments when no inline tags', () => {
+      const result = parseDSL('<Text>Simple text</Text>') as Text;
+
+      expect(result.text).toBe('Simple text');
+      expect(result.segments).toBeUndefined();
+    });
+
+    it('handles empty inline tags gracefully', () => {
+      const result = parseDSL('<Text>Hello <B></B>world</Text>') as Text;
+
+      expect(result.text).toBe('Hello world');
+      // Empty B tag produces no segment, so we get 2 segments
+      expect(result.segments).toHaveLength(2);
+    });
+
+    it('handles multiple inline tags in sequence', () => {
+      const result = parseDSL(
+        '<Text>Was <S>$99/mo</S> — now <U>$49/mo</U>.</Text>',
+      ) as Text;
+
+      expect(result.text).toBe('Was $99/mo — now $49/mo.');
+      expect(result.segments).toHaveLength(5);
+      expect(result.segments![0].text).toBe('Was ');
+      expect(result.segments![1]).toEqual({
+        text: '$99/mo',
+        style: { textDecoration: 'strikethrough' },
+      });
+      expect(result.segments![2].text).toBe(' — now ');
+      expect(result.segments![3]).toEqual({
+        text: '$49/mo',
+        style: { textDecoration: 'underline' },
+      });
+      expect(result.segments![4].text).toBe('.');
+    });
+
+    it('works with Heading component', () => {
+      const result = parseDSL(
+        '<Heading>Market <B>Opportunity</B></Heading>',
+      ) as Text;
+
+      expect(result.text).toBe('Market Opportunity');
+      expect(result.segments).toHaveLength(2);
+      expect(result.segments![1]).toEqual({
+        text: 'Opportunity',
+        style: { fontWeight: 700 },
+      });
+    });
+
+    it('works with Paragraph component', () => {
+      const result = parseDSL(
+        '<Paragraph>We grew <I>organically</I> to <B>10K users</B>.</Paragraph>',
+      ) as Text;
+
+      expect(result.text).toBe('We grew organically to 10K users.');
+      expect(result.segments).toHaveLength(5);
+    });
+
+    it('serialization round-trip for inline formatting', () => {
+      const input = '<Text fontSize={16}>Hello <B>world</B></Text>';
+      const parsed = parseDSL(input);
+      const serialized = serializeDSL(parsed);
+
+      expect(serialized).toContain('<B>world</B>');
+      // Re-parse and verify
+      const reparsed = parseDSL(serialized) as Text;
+      expect(reparsed.text).toBe('Hello world');
+      expect(reparsed.segments).toHaveLength(2);
+    });
+
+    it('serialization round-trip for nested formatting', () => {
+      const input = '<Text>Normal <B><I>bold italic</I></B> end</Text>';
+      const parsed = parseDSL(input);
+      const serialized = serializeDSL(parsed);
+
+      expect(serialized).toContain('<B>');
+      expect(serialized).toContain('<I>');
+      const reparsed = parseDSL(serialized) as Text;
+      expect(reparsed.text).toBe('Normal bold italic end');
     });
   });
 });

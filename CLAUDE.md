@@ -85,3 +85,15 @@ WORKSPACE_DIR=./workspace
 - `packages/primitives/README.md` — Primitive API reference with examples
 - `packages/figma-plugin/README.md` — Plugin dev guide and architecture
 - `packages/backend/src/agents/prompts.ts` — Agent system prompts with DSL rules and constraints
+
+## Design Configuration
+
+The `design/` directory is the single source of truth for slide generation:
+
+- **`design/theme.md`** — Colors, typography, spacing. Read before generating slides. Update when user requests design changes.
+- **`design/components.md`** — Reusable DSL component templates. Check before building common patterns.
+- **`design/dsl-reference.md`** — DSL syntax, rules, examples, and pitfalls.
+- **`design/slides/`** — Write slide XML files here. Pass project-relative paths to MCP (e.g., `design/slides/problem.xml`).
+- **`design/screenshots/`** — Figma snapshots saved here by MCP. Read at the project-relative path returned by `take_snapshot`.
+
+Values in `design/theme.md` override hardcoded defaults from `tokens.ts`.

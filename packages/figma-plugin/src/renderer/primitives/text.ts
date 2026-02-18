@@ -4,7 +4,7 @@
  * Creates Figma TextNode from Text primitive
  */
 
-import type { Text } from '@yafai/primitives';
+import type { Text, TextSegment, TextSegmentStyle } from '@yafai/primitives';
 import { normalizeFontWeight } from '@yafai/primitives';
 import { fillsFromColor } from '../colors.js';
 import { effectsToFigma } from '../effects.js';
@@ -66,6 +66,106 @@ async function ensureFont(
       await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
       ctx.loadedFonts.add('Inter:Regular');
       return 'Regular';
+    }
+  }
+}
+
+/**
+ * Apply range-based formatting from TextSegments to a Figma TextNode.
+ * Each segment may override font family, weight, style, size, color,
+ * decoration, and letter spacing for its character range.
+ */
+async function applySegmentFormatting(
+  node: TextNode,
+  segments: TextSegment[],
+  baseFamily: string,
+  baseWeight: number,
+  baseItalic: boolean,
+  ctx: RenderContext,
+): Promise<void> {
+  // First pass: collect all unique font variants needed
+  const fontsToLoad: Array<{ family: string; weight: number; italic: boolean }> = [];
+
+  for (const seg of segments) {
+    if (!seg.style) continue;
+    const family = seg.style.fontFamily || baseFamily;
+    const weight = seg.style.fontWeight
+      ? (typeof seg.style.fontWeight === 'number'
+          ? seg.style.fontWeight
+          : normalizeFontWeight(seg.style.fontWeight))
+      : baseWeight;
+    const italic = seg.style.fontStyle === 'italic' || (!seg.style.fontStyle && baseItalic);
+    fontsToLoad.push({ family, weight, italic });
+  }
+
+  // Load all needed fonts in parallel
+  await Promise.all(
+    fontsToLoad.map((f) => ensureFont(f.family, f.weight, f.italic, ctx)),
+  );
+
+  // Second pass: apply range-based styles
+  let offset = 0;
+  for (const seg of segments) {
+    const start = offset;
+    const end = offset + seg.text.length;
+    offset = end;
+
+    if (!seg.style || end <= start) continue;
+
+    const style = seg.style;
+
+    // Font name (family + weight + style)
+    if (style.fontFamily || style.fontWeight || style.fontStyle) {
+      const family = style.fontFamily || baseFamily;
+      const weight = style.fontWeight
+        ? (typeof style.fontWeight === 'number'
+            ? style.fontWeight
+            : normalizeFontWeight(style.fontWeight))
+        : baseWeight;
+      const italic = style.fontStyle === 'italic' || (!style.fontStyle && baseItalic);
+      const loadedStyle = await ensureFont(family, weight, italic, ctx);
+      const actualFamily = ctx.loadedFonts.has(`${family}:${loadedStyle}`)
+        ? family
+        : 'Inter';
+      node.setRangeFontName(start, end, { family: actualFamily, style: loadedStyle });
+    }
+
+    // Font size
+    if (style.fontSize) {
+      node.setRangeFontSize(start, end, style.fontSize);
+    }
+
+    // Text decoration
+    if (style.textDecoration) {
+      const decorationMap: Record<string, TextDecoration> = {
+        none: 'NONE',
+        underline: 'UNDERLINE',
+        strikethrough: 'STRIKETHROUGH',
+      };
+      node.setRangeTextDecoration(start, end, decorationMap[style.textDecoration] ?? 'NONE');
+    }
+
+    // Fill (text color)
+    if (style.fill) {
+      node.setRangeFills(start, end, fillsFromColor(style.fill));
+    }
+
+    // Letter spacing
+    if (style.letterSpacing !== undefined) {
+      if (typeof style.letterSpacing === 'number') {
+        node.setRangeLetterSpacing(start, end, {
+          value: style.letterSpacing,
+          unit: 'PIXELS',
+        });
+      } else {
+        const match = style.letterSpacing.match(/^([\d.]+)%$/);
+        if (match) {
+          node.setRangeLetterSpacing(start, end, {
+            value: Number.parseFloat(match[1]),
+            unit: 'PERCENT',
+          });
+        }
+      }
     }
   }
 }
@@ -227,6 +327,18 @@ export async function renderText(
   // Effects
   if (text.effects && text.effects.length > 0) {
     node.effects = effectsToFigma(text.effects);
+  }
+
+  // Inline segment formatting (B, I, U, S, Span)
+  if (text.segments && text.segments.length > 0) {
+    await applySegmentFormatting(
+      node,
+      text.segments,
+      fontFamily,
+      fontWeight,
+      isItalic,
+      ctx,
+    );
   }
 
   return node;

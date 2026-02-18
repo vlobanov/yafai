@@ -9,7 +9,7 @@ import type { Frame } from './primitives/frame.js';
 import type { Group } from './primitives/group.js';
 import type { Primitive } from './primitives/index.js';
 import type { Ellipse, Image, Rectangle, Vector } from './primitives/shapes.js';
-import type { Text } from './primitives/text.js';
+import type { Text, TextSegment, TextSegmentStyle } from './primitives/text.js';
 
 /**
  * Warning produced during parsing (non-fatal)
@@ -218,7 +218,19 @@ function skipWhitespaceAndComments(state: ParseState): void {
   }
 }
 
-function parseElement(state: ParseState): XMLElement | null {
+/**
+ * Tags whose children may contain inline text formatting.
+ * Inside these tags, whitespace between child elements must be preserved
+ * (collapsed to a single space) rather than stripped.
+ */
+const INLINE_TEXT_PARENTS = new Set([
+  'text', 'heading', 'paragraph', 'slidetitle',
+  'b', 'i', 'u', 's', 'span',
+]);
+
+const INLINE_TEXT_TAGS = new Set(['b', 'i', 'u', 's', 'span']);
+
+function parseElement(state: ParseState, preserveWhitespace = false): XMLElement | null {
   if (state.input[state.pos] !== '<') {
     return null;
   }
@@ -352,10 +364,16 @@ function parseElement(state: ParseState): XMLElement | null {
   }
 
   // Parse children
+  // For inline-text parents (Text, Heading, etc.), we preserve whitespace
+  // between children so "Hello <B>world</B> text" keeps its spaces.
   const children: (XMLElement | string)[] = [];
+  const inlineCtx = preserveWhitespace || INLINE_TEXT_PARENTS.has(tag.toLowerCase());
 
   while (state.pos < state.input.length) {
-    skipWhitespaceAndComments(state);
+    // Only strip whitespace/comments for non-inline-text parents
+    if (!inlineCtx) {
+      skipWhitespaceAndComments(state);
+    }
 
     // Check for closing tag
     if (state.input.slice(state.pos, state.pos + 2) === '</') {
@@ -403,9 +421,15 @@ function parseElement(state: ParseState): XMLElement | null {
       break;
     }
 
+    // Check for comment inside inline context
+    if (inlineCtx && state.input.slice(state.pos, state.pos + 4) === '<!--') {
+      skipComment(state);
+      continue;
+    }
+
     // Check for child element
     if (state.input[state.pos] === '<') {
-      const child = parseElement(state);
+      const child = parseElement(state, inlineCtx);
       if (child) {
         children.push(child);
       }
@@ -416,9 +440,20 @@ function parseElement(state: ParseState): XMLElement | null {
         state.pos++;
         state.column++;
       }
-      const text = state.input.slice(textStart, state.pos).trim();
-      if (text) {
-        children.push(text);
+      const rawText = state.input.slice(textStart, state.pos);
+
+      if (inlineCtx) {
+        // Collapse whitespace runs to single space, but don't trim —
+        // spaces at boundaries are significant ("Hello " before <B>)
+        const collapsed = rawText.replace(/\s+/g, ' ');
+        if (collapsed) {
+          children.push(collapsed);
+        }
+      } else {
+        const trimmed = rawText.trim();
+        if (trimmed) {
+          children.push(trimmed);
+        }
       }
     }
   }
@@ -562,6 +597,20 @@ const KNOWN_ATTRIBUTES: Record<string, Set<string>> = {
     'fontSize',
     'fontWeight',
     'fill',
+  ]),
+  // Inline text formatting tags
+  b: new Set([]),
+  i: new Set([]),
+  u: new Set([]),
+  s: new Set([]),
+  span: new Set([
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'fill',
+    'textDecoration',
+    'letterSpacing',
   ]),
 };
 
@@ -718,19 +767,144 @@ function parseFrame(
   return frame;
 }
 
-function parseText(element: XMLElement): Text {
-  const attrs = element.attributes;
+// ═══════════════════════════════════════════════════════════════════════════
+// INLINE TEXT FORMATTING
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // Get text content from children or text attribute
-  let textContent = attrs.text;
-  if (!textContent) {
-    const textChild = element.children.find(
-      (c): c is string => typeof c === 'string',
-    );
-    if (textChild) {
-      textContent = textChild;
+/**
+ * Map an inline tag name to its style overrides.
+ */
+function inlineTagToStyle(
+  tag: string,
+  attrs: Record<string, string>,
+): TextSegmentStyle {
+  switch (tag) {
+    case 'b':
+      return { fontWeight: 700 };
+    case 'i':
+      return { fontStyle: 'italic' };
+    case 'u':
+      return { textDecoration: 'underline' };
+    case 's':
+      return { textDecoration: 'strikethrough' };
+    case 'span':
+      return {
+        fontFamily: attrs.fontFamily || undefined,
+        fontSize: parseNumber(attrs.fontSize),
+        fontWeight: parseNumber(attrs.fontWeight) as any,
+        fontStyle: (attrs.fontStyle as any) || undefined,
+        textDecoration: (attrs.textDecoration as any) || undefined,
+        fill: attrs.fill || undefined,
+        letterSpacing: parseNumber(attrs.letterSpacing) as any,
+      };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Merge two TextSegmentStyle objects (child overrides parent).
+ */
+function mergeStyles(
+  parent: TextSegmentStyle | undefined,
+  child: TextSegmentStyle,
+): TextSegmentStyle {
+  if (!parent) return child;
+  const merged: TextSegmentStyle = { ...parent };
+  for (const [key, value] of Object.entries(child)) {
+    if (value !== undefined) {
+      (merged as any)[key] = value;
     }
   }
+  return merged;
+}
+
+/**
+ * Recursively flatten inline children into TextSegments.
+ */
+function flattenInlineChildren(
+  children: (XMLElement | string)[],
+  inheritedStyle: TextSegmentStyle | undefined,
+  segments: TextSegment[],
+): void {
+  for (const child of children) {
+    if (typeof child === 'string') {
+      // Plain text — inherit current style
+      if (child) {
+        segments.push({
+          text: child,
+          style: inheritedStyle
+            ? { ...inheritedStyle }
+            : undefined,
+        });
+      }
+    } else if (INLINE_TEXT_TAGS.has(child.tag.toLowerCase())) {
+      // Inline formatting tag — merge its style and recurse
+      const tagStyle = inlineTagToStyle(
+        child.tag.toLowerCase(),
+        child.attributes,
+      );
+      const merged = mergeStyles(inheritedStyle, tagStyle);
+      flattenInlineChildren(child.children, merged, segments);
+    }
+    // Skip non-inline elements (shouldn't appear here)
+  }
+}
+
+/**
+ * Check whether an element's children contain any inline formatting tags.
+ */
+function hasInlineTags(element: XMLElement): boolean {
+  return element.children.some(
+    (c) =>
+      typeof c !== 'string' && INLINE_TEXT_TAGS.has(c.tag.toLowerCase()),
+  );
+}
+
+/**
+ * Parse text content from an element, handling inline formatting tags.
+ * Returns { text, segments } where segments is only set if inline tags are present.
+ */
+function parseTextContent(
+  element: XMLElement,
+  textAttr?: string,
+): { text?: string; segments?: TextSegment[] } {
+  // If text is provided as an attribute, use it (no inline formatting)
+  if (textAttr) {
+    return { text: textAttr };
+  }
+
+  // Check for inline formatting tags in children
+  if (hasInlineTags(element)) {
+    const segments: TextSegment[] = [];
+    flattenInlineChildren(element.children, undefined, segments);
+
+    // Trim leading/trailing whitespace from the overall result
+    if (segments.length > 0) {
+      segments[0].text = segments[0].text.replace(/^\s+/, '');
+      const last = segments[segments.length - 1];
+      last.text = last.text.replace(/\s+$/, '');
+    }
+
+    // Remove empty segments that may result from trimming
+    const filtered = segments.filter((s) => s.text.length > 0);
+
+    // Build full text string (backwards compat)
+    const fullText = filtered.map((s) => s.text).join('');
+
+    return { text: fullText, segments: filtered };
+  }
+
+  // Plain text — find first text child
+  const textChild = element.children.find(
+    (c): c is string => typeof c === 'string',
+  );
+  return { text: textChild || undefined };
+}
+
+function parseText(element: XMLElement): Text {
+  const attrs = element.attributes;
+  const { text: textContent, segments } = parseTextContent(element, attrs.text);
 
   return {
     type: 'text',
@@ -750,6 +924,7 @@ function parseText(element: XMLElement): Text {
     textAlign: attrs.textAlign as any,
     textAlignVertical: attrs.textAlignVertical as any,
     fill: attrs.fill,
+    segments,
   };
 }
 
@@ -887,17 +1062,7 @@ function parseSlide(
  */
 function parseSlideTitle(element: XMLElement): Text {
   const attrs = element.attributes;
-
-  // Get text content from children or text attribute
-  let textContent = attrs.text;
-  if (!textContent) {
-    const textChild = element.children.find(
-      (c): c is string => typeof c === 'string',
-    );
-    if (textChild) {
-      textContent = textChild;
-    }
-  }
+  const { text: textContent, segments } = parseTextContent(element, attrs.text);
 
   return {
     type: 'text',
@@ -910,6 +1075,7 @@ function parseSlideTitle(element: XMLElement): Text {
     fontSize: parseNumber(attrs.fontSize) ?? 48,
     fontWeight: (parseNumber(attrs.fontWeight) ?? 600) as any,
     fill: attrs.fill || attrs.color || '#1a1a2e',
+    segments,
   };
 }
 
@@ -1055,16 +1221,7 @@ function parseHeading(element: XMLElement): Text {
   const sizes: Record<number, number> = { 1: 48, 2: 32, 3: 24 };
   const weights: Record<number, number> = { 1: 700, 2: 600, 3: 600 };
 
-  // Get text content
-  let textContent = attrs.text;
-  if (!textContent) {
-    const textChild = element.children.find(
-      (c): c is string => typeof c === 'string',
-    );
-    if (textChild) {
-      textContent = textChild;
-    }
-  }
+  const { text: textContent, segments } = parseTextContent(element, attrs.text);
 
   return {
     type: 'text',
@@ -1077,6 +1234,7 @@ function parseHeading(element: XMLElement): Text {
     fontSize: sizes[level] || 32,
     fontWeight: (weights[level] || 600) as any,
     fill: attrs.fill || '#1a1a2e',
+    segments,
   };
 }
 
@@ -1085,17 +1243,7 @@ function parseHeading(element: XMLElement): Text {
  */
 function parseParagraph(element: XMLElement): Text {
   const attrs = element.attributes;
-
-  // Get text content
-  let textContent = attrs.text;
-  if (!textContent) {
-    const textChild = element.children.find(
-      (c): c is string => typeof c === 'string',
-    );
-    if (textChild) {
-      textContent = textChild;
-    }
-  }
+  const { text: textContent, segments } = parseTextContent(element, attrs.text);
 
   return {
     type: 'text',
@@ -1109,6 +1257,7 @@ function parseParagraph(element: XMLElement): Text {
     fontSize: parseNumber(attrs.fontSize) ?? 18,
     fontWeight: (parseNumber(attrs.fontWeight) ?? 400) as any,
     fill: attrs.fill || '#1a1a2e',
+    segments,
   };
 }
 
@@ -1126,9 +1275,22 @@ export function serializeDSL(primitive: Primitive, indent = 0): string {
   const children = getChildren(primitive);
   const textContent = getTextContent(primitive);
 
-  // Self-closing tag if no children and no text content
-  if (children.length === 0 && !textContent) {
+  // Check for Text with segments (inline formatting)
+  const textPrimitive = primitive.type === 'text' ? (primitive as Text) : null;
+  const hasSegments = textPrimitive?.segments && textPrimitive.segments.length > 0;
+
+  // Self-closing tag if no children, no text content, and no segments
+  if (children.length === 0 && !textContent && !hasSegments) {
     return `${spaces}<${tag}${attrs} />`;
+  }
+
+  // Text with inline segments
+  if (hasSegments) {
+    const segXml = serializeSegments(textPrimitive!.segments!);
+    if (segXml.length < 60 && !segXml.includes('\n')) {
+      return `${spaces}<${tag}${attrs}>${segXml}</${tag}>`;
+    }
+    return `${spaces}<${tag}${attrs}>\n${spaces}  ${segXml}\n${spaces}</${tag}>`;
   }
 
   // Tag with text content only (no element children)
@@ -1163,9 +1325,9 @@ function getTagName(type: string): string {
 function serializeAttributes(primitive: Primitive): string {
   const attrs: string[] = [];
 
-  // Get all properties except type, children, and text
+  // Get all properties except type, children, text, and segments
   for (const [key, value] of Object.entries(primitive)) {
-    if (key === 'type' || key === 'children' || key === 'text') continue;
+    if (key === 'type' || key === 'children' || key === 'text' || key === 'segments') continue;
     if (value === undefined || value === null) continue;
 
     const attrValue = serializeAttributeValue(value);
@@ -1218,13 +1380,88 @@ function getChildren(primitive: Primitive): Primitive[] {
 }
 
 /**
- * Get text content of a primitive (for Text nodes)
+ * Get text content of a primitive (for Text nodes).
+ * Returns undefined if the Text has segments (serialized separately).
  */
 function getTextContent(primitive: Primitive): string | undefined {
   if (primitive.type === 'text' && 'text' in primitive) {
-    return primitive.text as string | undefined;
+    const text = primitive as Text;
+    // If segments exist, they'll be serialized as inline XML instead
+    if (text.segments && text.segments.length > 0) {
+      return undefined;
+    }
+    return text.text;
   }
   return undefined;
+}
+
+/**
+ * Serialize a TextSegmentStyle to an inline XML tag.
+ * Returns { openTag, closeTag } for wrapping the text.
+ */
+function segmentStyleToTags(style: TextSegmentStyle | undefined): {
+  open: string;
+  close: string;
+} {
+  if (!style) return { open: '', close: '' };
+
+  const tags: { open: string; close: string }[] = [];
+
+  if (style.fontWeight === 700) {
+    tags.push({ open: '<B>', close: '</B>' });
+  }
+  if (style.fontStyle === 'italic') {
+    tags.push({ open: '<I>', close: '</I>' });
+  }
+  if (style.textDecoration === 'underline') {
+    tags.push({ open: '<U>', close: '</U>' });
+  }
+  if (style.textDecoration === 'strikethrough') {
+    tags.push({ open: '<S>', close: '</S>' });
+  }
+
+  // Check if there are leftover style properties that need a <Span>
+  const spanAttrs: string[] = [];
+  if (style.fontFamily) spanAttrs.push(`fontFamily="${escapeXml(style.fontFamily)}"`);
+  if (style.fontSize) spanAttrs.push(`fontSize={${style.fontSize}}`);
+  if (style.fontWeight && style.fontWeight !== 700) spanAttrs.push(`fontWeight={${style.fontWeight}}`);
+  if (style.fill) spanAttrs.push(`fill="${escapeXml(style.fill)}"`);
+  if (style.letterSpacing !== undefined) {
+    const lsVal = typeof style.letterSpacing === 'number'
+      ? `{${style.letterSpacing}}`
+      : `"${style.letterSpacing}"`;
+    spanAttrs.push(`letterSpacing=${lsVal}`);
+  }
+
+  if (spanAttrs.length > 0) {
+    tags.push({
+      open: `<Span ${spanAttrs.join(' ')}>`,
+      close: '</Span>',
+    });
+  }
+
+  if (tags.length === 0) return { open: '', close: '' };
+
+  // Nest tags: outermost first in open, innermost first in close
+  const open = tags.map((t) => t.open).join('');
+  const close = tags
+    .slice()
+    .reverse()
+    .map((t) => t.close)
+    .join('');
+  return { open, close };
+}
+
+/**
+ * Serialize Text segments to inline XML.
+ */
+function serializeSegments(segments: TextSegment[]): string {
+  return segments
+    .map((seg) => {
+      const { open, close } = segmentStyleToTags(seg.style);
+      return `${open}${escapeXml(seg.text)}${close}`;
+    })
+    .join('');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

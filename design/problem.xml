@@ -1,0 +1,135 @@
+<Slide id="slide-problem">
+  <Frame id="root" width={1920} height={1080} fill="#F5F6F7"
+    layoutMode="vertical"
+    paddingTop={72} paddingLeft={96} paddingRight={96} paddingBottom={56}
+    gap={20}>
+
+    <!-- Main content wrapper — takes remaining space, pushes footer to bottom -->
+    <Frame id="main" layoutMode="vertical" width="fill" height="fill" gap={20}>
+
+      <!-- LAYER 1: Section label with red line -->
+      <Frame id="section-label" layoutMode="horizontal" gap={8} counterAxisAlign="center" width="fill">
+        <Rectangle id="section-red-line" width={48} height={3} fill="#E63946" />
+        <Text id="section-text" fontSize={14} fontWeight={600} fill="#1A1A2E" letterSpacing={1.18}>THE PROBLEM</Text>
+      </Frame>
+
+      <!-- LAYER 2: Headline -->
+      <Frame id="headline" layoutMode="vertical" gap={4} width="fill">
+        <Text id="headline-line1" width="fill" fontSize={48} fontWeight={300} fill="#1A1A2E" lineHeight={1.21}>$10B+ invested in ocular gene therapy.</Text>
+        <Text id="headline-line2" width="fill" fontSize={48} fontWeight={300} fill="#E63946" lineHeight={1.21}>Delivery remains unsolved.</Text>
+      </Frame>
+
+      <!-- LAYER 3: Stats row -->
+      <Frame id="stats-row" layoutMode="horizontal" width="fill" primaryAxisAlign="space-between" gap={48}>
+        <!-- Stat 1: 5.5M -->
+        <Frame id="stat-1" layoutMode="vertical" gap={6} width="fill" counterAxisAlign="center">
+          <Frame id="stat-1-number" layoutMode="horizontal" counterAxisAlign="end" gap={4} width="hug">
+            <Text id="stat-1-big" fontSize={56} fontWeight={300} fill="#E63946">5.5</Text>
+            <Text id="stat-1-unit" fontSize={28} fontWeight={300} fill="#E63946">M</Text>
+          </Frame>
+          <Text id="stat-1-label" width="fill" fontSize={15} fontWeight={400} fill="#8899AA" lineHeight={1.33} textAlign="center">Patients with inherited
+retinal diseases</Text>
+          <Text id="stat-1-cite" fontSize={11} fontWeight={400} fill="#BBC4CC" textAlign="center">Hanany et al., PNAS 2020</Text>
+        </Frame>
+
+        <!-- Stat 2: 1 -->
+        <Frame id="stat-2" layoutMode="vertical" gap={6} width="fill" counterAxisAlign="center">
+          <Text id="stat-2-num" fontSize={56} fontWeight={300} fill="#E63946">1</Text>
+          <Text id="stat-2-label" width="fill" fontSize={15} fontWeight={400} fill="#8899AA" lineHeight={1.33} textAlign="center">Approved gene therapy
+for one small gene (RPE65)</Text>
+        </Frame>
+
+        <!-- Stat 3: $17B+ -->
+        <Frame id="stat-3" layoutMode="vertical" gap={6} width="fill" counterAxisAlign="center">
+          <Frame id="stat-3-number" layoutMode="horizontal" counterAxisAlign="end" gap={4} width="hug">
+            <Text id="stat-3-big" fontSize={56} fontWeight={300} fill="#E63946">$17</Text>
+            <Text id="stat-3-unit" fontSize={28} fontWeight={300} fill="#E63946">B+</Text>
+          </Frame>
+          <Text id="stat-3-label" width="fill" fontSize={15} fontWeight={400} fill="#8899AA" lineHeight={1.33} textAlign="center">IRD therapeutics market
+by 2029</Text>
+          <Text id="stat-3-cite" fontSize={11} fontWeight={400} fill="#BBC4CC" textAlign="center">Research and Markets 2025</Text>
+        </Frame>
+      </Frame>
+
+      <!-- LAYER 4: Comparison table -->
+      <Frame id="table" layoutMode="vertical" cornerRadius={12} clipsContent={true} width="fill">
+
+        <!-- Header row -->
+        <Frame id="table-header" layoutMode="horizontal" fill="#1A1A2E" width="fill"
+          counterAxisAlign="center" paddingTop={14} paddingBottom={14}>
+          <Frame id="th-platform-cell" width={200} layoutMode="vertical" paddingLeft={24} primaryAxisAlign="center">
+            <Text id="th-platform" fontSize={11} fontWeight={600} fill="#FFFFFF" letterSpacing={1.15}>PLATFORM</Text>
+          </Frame>
+          <Text id="th-cargo" width={160} fontSize={11} fontWeight={600} fill="#FFFFFF" letterSpacing={1.15} textAlign="center">LARGE CARGO</Text>
+          <Text id="th-durable" width={160} fontSize={11} fontWeight={600} fill="#FFFFFF" letterSpacing={1.15} textAlign="center">DURABLE EXPRESSION</Text>
+          <Text id="th-redose" width={160} fontSize={11} fontWeight={600} fill="#FFFFFF" letterSpacing={1.15} textAlign="center">SAFE TO REDOSE</Text>
+          <Frame id="th-evidence-cell" width="fill" layoutMode="vertical" paddingLeft={24} primaryAxisAlign="center">
+            <Text id="th-evidence" fontSize={11} fontWeight={600} fill="#FFFFFF" letterSpacing={1.15}>CLINICAL EVIDENCE</Text>
+          </Frame>
+        </Frame>
+
+        <!-- Row 1: AAV -->
+        <Frame id="row-aav" layoutMode="horizontal" fill="#FFFFFF" width="fill" counterAxisAlign="center">
+          <Frame id="aav-platform-cell" width={200} layoutMode="vertical" paddingLeft={24} paddingTop={16} paddingBottom={16} primaryAxisAlign="center">
+            <Text id="aav-name" fontSize={18} fontWeight={700} fill="#1A1A2E">AAV</Text>
+          </Frame>
+          <Text id="aav-cargo" width={160} fontSize={24} fontWeight={700} fill="#E63946" textAlign="center">✕</Text>
+          <Text id="aav-durable" width={160} fontSize={24} fontWeight={700} fill="#2EC4B6" textAlign="center">✓</Text>
+          <Text id="aav-redose" width={160} fontSize={24} fontWeight={700} fill="#E63946" textAlign="center">✕</Text>
+          <Frame id="aav-evidence-cell" width="fill" layoutMode="vertical" paddingLeft={24} paddingTop={16} paddingBottom={16} gap={8}>
+            <Text id="aav-evidence-1" width="fill" fontSize={14} fontWeight={400} fill="#333340" lineHeight={1.43}>Luxturna (RPE65, Spark) — Roche acquired for $4.3B → $2.4B write-down. Sales ↓60% YoY. 80% of treated eyes develop atrophy.</Text>
+            <Text id="aav-evidence-2" width="fill" fontSize={14} fontWeight={400} fill="#333340" lineHeight={1.43}>Adverum INFINITY trial halted — irreversible vision loss. 4.7kb cargo limit excludes most IRD genes.</Text>
+          </Frame>
+        </Frame>
+
+        <!-- Separator 1 -->
+        <Frame id="sep-1" width="fill" height={1} fill="#F0F0F0" layoutMode="horizontal" />
+
+        <!-- Row 2: Dual AAV -->
+        <Frame id="row-dual" layoutMode="horizontal" fill="#FFFFFF" width="fill" counterAxisAlign="center">
+          <Frame id="dual-platform-cell" width={200} layoutMode="vertical" paddingLeft={24} paddingTop={12} paddingBottom={12} primaryAxisAlign="center">
+            <Text id="dual-name" fontSize={18} fontWeight={700} fill="#1A1A2E">Dual AAV</Text>
+          </Frame>
+          <Text id="dual-cargo" width={160} fontSize={20} fontWeight={400} fill="#8899AA" textAlign="center">~</Text>
+          <Text id="dual-durable" width={160} fontSize={20} fontWeight={400} fill="#8899AA" textAlign="center">~</Text>
+          <Text id="dual-redose" width={160} fontSize={24} fontWeight={700} fill="#E63946" textAlign="center">✕</Text>
+          <Frame id="dual-evidence-cell" width="fill" layoutMode="vertical" paddingLeft={24} paddingTop={12} paddingBottom={12} gap={8}>
+            <Text id="dual-evidence-1" width="fill" fontSize={14} fontWeight={400} fill="#333340" lineHeight={1.43}>Sarepta ABCA4 for Stargardt — Phase 1/2a, 22 patients: no visual improvement.</Text>
+            <Text id="dual-evidence-2" width="fill" fontSize={14} fontWeight={400} fill="#333340" lineHeight={1.43}>~9kb theoretical capacity, lower efficiency in vivo. Same immunogenicity as single AAV — still can't redose.</Text>
+          </Frame>
+        </Frame>
+
+        <!-- Separator 2 -->
+        <Frame id="sep-2" width="fill" height={1} fill="#F0F0F0" layoutMode="horizontal" />
+
+        <!-- Row 3: LNP -->
+        <Frame id="row-lnp" layoutMode="horizontal" fill="#FFFFFF" width="fill" counterAxisAlign="center">
+          <Frame id="lnp-platform-cell" width={200} layoutMode="vertical" paddingLeft={24} paddingTop={12} paddingBottom={12} primaryAxisAlign="center">
+            <Text id="lnp-name" fontSize={18} fontWeight={700} fill="#1A1A2E">LNP</Text>
+          </Frame>
+          <Text id="lnp-cargo" width={160} fontSize={24} fontWeight={700} fill="#2EC4B6" textAlign="center">✓</Text>
+          <Text id="lnp-durable" width={160} fontSize={24} fontWeight={700} fill="#E63946" textAlign="center">✕</Text>
+          <Text id="lnp-redose" width={160} fontSize={20} fontWeight={400} fill="#8899AA" textAlign="center">~</Text>
+          <Frame id="lnp-evidence-cell" width="fill" layoutMode="vertical" paddingLeft={24} paddingTop={12} paddingBottom={12} gap={8}>
+            <Text id="lnp-evidence-1" width="fill" fontSize={14} fontWeight={400} fill="#333340" lineHeight={1.43}>Packages up to 20kb — big enough for any IRD gene. But expression lasts hours, not weeks.</Text>
+            <Text id="lnp-evidence-2" width="fill" fontSize={14} fontWeight={400} fill="#333340" lineHeight={1.43}>Endosomal escape triggers inflammation (Nature Nanotech 2025). Zero ocular clinical trials to date.</Text>
+          </Frame>
+        </Frame>
+      </Frame>
+
+      <!-- LAYER 5: Takeaway -->
+      <Text id="takeaway" width="fill" fontSize={18} fontWeight={400} fill="#1A1A2E" lineHeight={1.44}>310+ known IRD genes (RetNet 2024). No platform combines large cargo, durable expression, and safe redosing. Zero approved therapies for large-gene IRDs.</Text>
+
+    </Frame>
+
+    <!-- LAYER 6: Footer -->
+    <Frame id="footer" layoutMode="horizontal" width="fill" counterAxisAlign="center" primaryAxisAlign="space-between" gap={24}>
+      <Text id="footer-confidential" fontSize={11} fontWeight={400} fill="#8899AA">Non-confidential</Text>
+      <Frame id="footer-page" layoutMode="horizontal" gap={10} counterAxisAlign="center" width="hug">
+        <Rectangle id="footer-red-line" width={28} height={2} fill="#E63946" />
+        <Text id="footer-number" fontSize={12} fontWeight={400} fill="#8899AA">01</Text>
+      </Frame>
+    </Frame>
+
+  </Frame>
+</Slide>
