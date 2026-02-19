@@ -230,5 +230,36 @@ export function createMcpServer(bridge: FigmaBridge): McpServer {
     },
   );
 
+  // ────────────────────────────────────────────────────────────────────
+  // 6. get_selection_html
+  // ────────────────────────────────────────────────────────────────────
+  mcp.tool(
+    'get_selection_html',
+    'Get the currently selected Figma element(s) as HTML with inline CSS. Select a frame in Figma first, then call this to extract its structure and styles.',
+    {},
+    async () => {
+      try {
+        const result = await bridge.getSelectionHtml();
+
+        if (!result.success) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [{ type: 'text' as const, text: result.html ?? 'No HTML generated' }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: 'text' as const, text: `Selection HTML failed: ${message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   return mcp;
 }

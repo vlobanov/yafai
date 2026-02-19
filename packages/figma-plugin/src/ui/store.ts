@@ -147,6 +147,18 @@ export function setupPluginListener(): () => void {
         });
         break;
 
+      case 'selection-html-result':
+        console.log('[Yafai UI] Selection HTML result:', msg.requestId);
+        wsClient.sendToWs({
+          type: 'selection:html:result',
+          requestId: msg.requestId,
+          success: msg.success,
+          html: msg.html,
+          nodeCount: msg.nodeCount,
+          error: msg.error,
+        });
+        break;
+
       case 'error':
         console.error('[Yafai UI] Plugin error:', msg.message);
         break;

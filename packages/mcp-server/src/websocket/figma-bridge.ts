@@ -1,9 +1,11 @@
 import { WebSocketServer, type WebSocket } from 'ws';
 import type http from 'node:http';
 import { log } from '../util/logger.js';
+import crypto from 'node:crypto';
 import type {
   PluginToServerMessage,
   RenderResultMessage,
+  SelectionHtmlResultMessage,
   SnapshotResultMessage,
   ValidationResultMessage,
 } from './types.js';
@@ -23,6 +25,7 @@ export class FigmaBridge {
 
   private renderRequests = new Map<string, PendingRequest<RenderResultMessage>>();
   private snapshotRequests = new Map<string, PendingRequest<SnapshotResultMessage>>();
+  private selectionHtmlRequests = new Map<string, PendingRequest<SelectionHtmlResultMessage>>();
   private validationResults = new Map<string, ValidationResultMessage>();
 
   /**
@@ -111,6 +114,23 @@ export class FigmaBridge {
   }
 
   /**
+   * Request HTML representation of the currently selected Figma element(s).
+   */
+  async getSelectionHtml(): Promise<SelectionHtmlResultMessage> {
+    this.assertConnected();
+
+    const requestId = crypto.randomUUID();
+    const promise = this.createPendingRequest<SelectionHtmlResultMessage>(
+      this.selectionHtmlRequests,
+      requestId,
+    );
+
+    this.send({ type: 'selection:html:request', requestId });
+
+    return promise;
+  }
+
+  /**
    * Request a snapshot and wait for the base64 PNG result.
    */
   async takeSnapshot(slideId: string): Promise<SnapshotResultMessage> {
@@ -146,6 +166,10 @@ export class FigmaBridge {
 
       case 'snapshot:result':
         this.resolvePending(this.snapshotRequests, msg.slideId, msg);
+        break;
+
+      case 'selection:html:result':
+        this.resolvePending(this.selectionHtmlRequests, msg.requestId, msg);
         break;
     }
   }
@@ -211,5 +235,11 @@ export class FigmaBridge {
       pending.reject(error);
     }
     this.snapshotRequests.clear();
+
+    for (const [, pending] of this.selectionHtmlRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.selectionHtmlRequests.clear();
   }
 }

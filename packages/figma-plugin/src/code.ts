@@ -10,6 +10,7 @@
 
 import { type Primitive, parseDSL } from '@yafai/primitives';
 import { render, renderAll } from './renderer/index.js';
+import { nodeToHtml } from './converter/node-to-html.js';
 
 // Plugin configuration
 const PLUGIN_WIDTH = 400;
@@ -53,12 +54,18 @@ interface ExportSnapshotMessage {
   slideId: string;
 }
 
+interface GetSelectionHtmlMessage {
+  type: 'get-selection-html';
+  requestId: string;
+}
+
 type PluginMessage =
   | RenderMessage
   | RenderBatchMessage
   | RenderDSLMessage
   | ValidateMessage
-  | ExportSnapshotMessage;
+  | ExportSnapshotMessage
+  | GetSelectionHtmlMessage;
 
 /**
  * Message types from plugin to UI
@@ -133,6 +140,10 @@ async function handleMessage(msg: PluginMessage) {
 
       case 'export-snapshot':
         await handleExportSnapshot(msg);
+        break;
+
+      case 'get-selection-html':
+        await handleGetSelectionHtml(msg);
         break;
 
       default:
@@ -531,6 +542,50 @@ function validateNode(node: SceneNode): ValidationError[] {
   }
 
   return errors;
+}
+
+/**
+ * Handle get-selection-html request (from MCP server)
+ * Converts currently selected Figma nodes to HTML with inline CSS.
+ */
+async function handleGetSelectionHtml(msg: GetSelectionHtmlMessage) {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    figma.ui.postMessage({
+      type: 'selection-html-result',
+      requestId: msg.requestId,
+      success: false,
+      error: 'No elements selected. Select one or more elements in Figma first.',
+    });
+    return;
+  }
+
+  try {
+    const htmlParts: string[] = [];
+    for (const node of selection) {
+      htmlParts.push(await nodeToHtml(node, 0));
+    }
+
+    const html =
+      selection.length === 1
+        ? htmlParts[0]
+        : `<div style="display: contents">\n${htmlParts.join('\n')}\n</div>`;
+
+    figma.ui.postMessage({
+      type: 'selection-html-result',
+      requestId: msg.requestId,
+      success: true,
+      html,
+      nodeCount: selection.length,
+    });
+  } catch (err) {
+    figma.ui.postMessage({
+      type: 'selection-html-result',
+      requestId: msg.requestId,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 // Start the plugin

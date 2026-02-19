@@ -29,7 +29,15 @@ export interface SnapshotRequestMessage {
   slideId: string;
 }
 
-export type ServerToPluginMessage = RenderSlideMessage | SnapshotRequestMessage;
+export interface SelectionHtmlRequestMessage {
+  type: 'selection:html:request';
+  requestId: string;
+}
+
+export type ServerToPluginMessage =
+  | RenderSlideMessage
+  | SnapshotRequestMessage
+  | SelectionHtmlRequestMessage;
 
 // ============================================================================
 // Plugin -> Server
@@ -59,8 +67,18 @@ export interface SnapshotResultMessage {
   imageBase64: string;
 }
 
+export interface SelectionHtmlResultMessage {
+  type: 'selection:html:result';
+  requestId: string;
+  success: boolean;
+  html?: string;
+  nodeCount?: number;
+  error?: string;
+}
+
 export type PluginToServerMessage =
   | PluginReadyMessage
   | RenderResultMessage
   | ValidationResultMessage
-  | SnapshotResultMessage;
+  | SnapshotResultMessage
+  | SelectionHtmlResultMessage;
