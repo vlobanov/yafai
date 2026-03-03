@@ -20,7 +20,12 @@ interface McpSelectionHtmlRequest {
   requestId: string;
 }
 
-type McpServerMessage = McpRenderSlide | McpSnapshotRequest | McpSelectionHtmlRequest;
+interface McpSelectionSnapshotRequest {
+  type: 'snapshot:selection:request';
+  requestId: string;
+}
+
+type McpServerMessage = McpRenderSlide | McpSnapshotRequest | McpSelectionHtmlRequest | McpSelectionSnapshotRequest;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WEBSOCKET CLIENT
@@ -135,6 +140,14 @@ class WebSocketClient {
         console.log('[MCP] Selection HTML requested:', message.requestId);
         postToPlugin({
           type: 'get-selection-html',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'snapshot:selection:request':
+        console.log('[MCP] Selection snapshot requested:', message.requestId);
+        postToPlugin({
+          type: 'snapshot-selection',
           requestId: message.requestId,
         });
         break;

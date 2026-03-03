@@ -1,0 +1,157 @@
+<Frame id="slide-1-problem" width={1920} height={1080} fill="#F5F6F7"
+  layoutMode="vertical" paddingTop={72} paddingLeft={96} paddingRight={96} paddingBottom={30}
+  primaryAxisAlign="space-between" gap={0}>
+
+  <!-- Main content -->
+  <Frame id="content" width="fill" layoutMode="vertical" gap={0}>
+
+    <!-- LAYER 1: Section label -->
+    <Frame id="section-label" layoutMode="horizontal" width="fill" gap={10} counterAxisAlign="center">
+      <Rectangle width={48} height={3} fill="#E63946"/>
+      <Text fontFamily="Inter" fontSize={18} fontWeight={600} letterSpacing={3} fill="#1A1A2E">THE PROBLEM</Text>
+    </Frame>
+
+    <!-- LAYER 2: Headline -->
+    <Frame id="headline" width="fill" layoutMode="vertical" paddingTop={20} gap={0}>
+      <Text fontFamily="Inter" fontSize={60} fontWeight={300} lineHeight={72} fill="#1A1A2E" width={1500}>$10B+ invested in ocular gene therapy.</Text>
+      <Text fontFamily="Inter" fontSize={60} fontWeight={300} lineHeight={72} fill="#E63946" width={1500}>Delivery remains unsolved.</Text>
+    </Frame>
+
+    <!-- LAYER 3: Stat row -->
+    <Frame id="stat-section" width="fill" layoutMode="vertical" paddingTop={28}>
+      <Frame id="stat-row" width="fill" layoutMode="horizontal">
+        <!-- Stat 1 -->
+        <Frame id="stat-1" width="fill" layoutMode="vertical" gap={8} counterAxisAlign="center">
+          <Text fontFamily="Inter" fontSize={80} fontWeight={300} fill="#E63946" textAlign="center">5.5M</Text>
+          <Text fontFamily="Inter" fontSize={22} fontWeight={400} fill="#8899AA" lineHeight={28} textAlign="center" width="fill">Patients with inherited
+retinal diseases</Text>
+          <Text fontFamily="Inter" fontSize={16} fontWeight={400} fill="#BBC4CC" textAlign="center" width="fill">Hanany et al., PNAS 2020</Text>
+        </Frame>
+        <!-- Stat 2 -->
+        <Frame id="stat-2" width="fill" layoutMode="vertical" gap={8} counterAxisAlign="center">
+          <Text fontFamily="Inter" fontSize={80} fontWeight={300} fill="#E63946" textAlign="center">1</Text>
+          <Text fontFamily="Inter" fontSize={22} fontWeight={400} fill="#8899AA" lineHeight={28} textAlign="center" width="fill">Approved gene therapy
+for one small gene (RPE65)</Text>
+        </Frame>
+        <!-- Stat 3 -->
+        <Frame id="stat-3" width="fill" layoutMode="vertical" gap={8} counterAxisAlign="center">
+          <Frame id="stat-3-number" layoutMode="horizontal" counterAxisAlign="baseline">
+            <Text fontFamily="Inter" fontSize={80} fontWeight={300} fill="#E63946">$17</Text>
+            <Text fontFamily="Inter" fontSize={40} fontWeight={300} fill="#E63946">B+</Text>
+          </Frame>
+          <Text fontFamily="Inter" fontSize={22} fontWeight={400} fill="#8899AA" lineHeight={28} textAlign="center" width="fill">IRD therapeutics market
+by 2029</Text>
+          <Text fontFamily="Inter" fontSize={16} fontWeight={400} fill="#BBC4CC" textAlign="center" width="fill">Research and Markets 2025</Text>
+        </Frame>
+      </Frame>
+    </Frame>
+
+    <!-- LAYER 4: Comparison table -->
+    <Frame id="table-section" width="fill" layoutMode="vertical" paddingTop={40}>
+      <Frame id="table" width="fill" cornerRadius={12} clipsContent={true} layoutMode="vertical">
+
+        <!-- Table header -->
+        <Frame id="table-header" width="fill" height={56} fill="#1A1A2E" layoutMode="horizontal" counterAxisAlign="center">
+          <Frame width={220} height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28}>
+            <Text fontFamily="Inter" fontSize={14} fontWeight={600} letterSpacing={1.5} fill="#FFFFFF">PLATFORM</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={14} fontWeight={600} letterSpacing={1.5} fill="#FFFFFF" textAlign="center" width="fill">LARGE CARGO</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={14} fontWeight={600} letterSpacing={1.5} fill="#FFFFFF" textAlign="center" width="fill">DURABLE EXP.</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={14} fontWeight={600} letterSpacing={1.5} fill="#FFFFFF" textAlign="center" width="fill">SAFE REDOSE</Text>
+          </Frame>
+          <Frame width="fill" height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28}>
+            <Text fontFamily="Inter" fontSize={14} fontWeight={600} letterSpacing={1.5} fill="#FFFFFF">CLINICAL EVIDENCE</Text>
+          </Frame>
+        </Frame>
+
+        <!-- Row 1: AAV -->
+        <Frame id="row-aav" width="fill" fill="#FFFFFF" layoutMode="horizontal" counterAxisAlign="center" paddingTop={16} paddingBottom={16}>
+          <Frame width={220} height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28}>
+            <Text fontFamily="Inter" fontSize={24} fontWeight={700} fill="#1A1A2E">AAV</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={32} fontWeight={700} fill="#E63946" textAlign="center" width="fill">✕</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={32} fontWeight={700} fill="#2EC4B6" textAlign="center" width="fill">✓</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={32} fontWeight={700} fill="#E63946" textAlign="center" width="fill">✕</Text>
+          </Frame>
+          <Frame width="fill" height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28} paddingRight={28} gap={6}>
+            <Text fontFamily="Inter" fontSize={18} fontWeight={400} fill="#333340" lineHeight={26} width="fill">Luxturna (RPE65, Spark) — Roche acquired for $4.3B → $2.4B write-down. Sales ↓60% YoY.</Text>
+            <Text fontFamily="Inter" fontSize={18} fontWeight={400} fill="#333340" lineHeight={26} width="fill">Adverum INFINITY trial halted — irreversible vision loss. 4.7kb cargo limit excludes most IRD genes.</Text>
+          </Frame>
+        </Frame>
+
+        <!-- Separator -->
+        <Frame width="fill" height={1} fill="#E8E8E8" />
+
+        <!-- Row 2: Dual AAV -->
+        <Frame id="row-dual-aav" width="fill" fill="#FFFFFF" layoutMode="horizontal" counterAxisAlign="center" paddingTop={14} paddingBottom={14}>
+          <Frame width={220} height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28}>
+            <Text fontFamily="Inter" fontSize={24} fontWeight={700} fill="#1A1A2E">Dual AAV</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={28} fontWeight={400} fill="#8899AA" textAlign="center" width="fill">~</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={28} fontWeight={400} fill="#8899AA" textAlign="center" width="fill">~</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={32} fontWeight={700} fill="#E63946" textAlign="center" width="fill">✕</Text>
+          </Frame>
+          <Frame width="fill" height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28} paddingRight={28} gap={6}>
+            <Text fontFamily="Inter" fontSize={18} fontWeight={400} fill="#333340" lineHeight={26} width="fill">Sarepta ABCA4 for Stargardt — Phase 1/2a, 22 patients: no visual improvement.</Text>
+            <Text fontFamily="Inter" fontSize={18} fontWeight={400} fill="#333340" lineHeight={26} width="fill">~9kb theoretical capacity, lower efficiency in vivo. Same immunogenicity — still can't redose.</Text>
+          </Frame>
+        </Frame>
+
+        <!-- Separator -->
+        <Frame width="fill" height={1} fill="#E8E8E8" />
+
+        <!-- Row 3: LNP -->
+        <Frame id="row-lnp" width="fill" fill="#FFFFFF" layoutMode="horizontal" counterAxisAlign="center" paddingTop={14} paddingBottom={14}>
+          <Frame width={220} height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28}>
+            <Text fontFamily="Inter" fontSize={24} fontWeight={700} fill="#1A1A2E">LNP</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={32} fontWeight={700} fill="#2EC4B6" textAlign="center" width="fill">✓</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={32} fontWeight={700} fill="#E63946" textAlign="center" width="fill">✕</Text>
+          </Frame>
+          <Frame width={170} height="fill" layoutMode="vertical" primaryAxisAlign="center">
+            <Text fontFamily="Inter" fontSize={28} fontWeight={400} fill="#8899AA" textAlign="center" width="fill">~</Text>
+          </Frame>
+          <Frame width="fill" height="fill" layoutMode="vertical" primaryAxisAlign="center" paddingLeft={28} paddingRight={28} gap={6}>
+            <Text fontFamily="Inter" fontSize={18} fontWeight={400} fill="#333340" lineHeight={26} width="fill">Packages up to 20kb — big enough for any IRD gene. But expression lasts hours, not weeks.</Text>
+            <Text fontFamily="Inter" fontSize={18} fontWeight={400} fill="#333340" lineHeight={26} width="fill">Endosomal escape triggers inflammation (Nature Nanotech 2025). Zero ocular clinical trials to date.</Text>
+          </Frame>
+        </Frame>
+
+      </Frame>
+    </Frame>
+
+    <!-- LAYER 5: Takeaway line -->
+    <Frame id="takeaway-section" width="fill" layoutMode="vertical" paddingTop={24}>
+      <Text fontFamily="Inter" fontSize={24} fontWeight={400} fill="#1A1A2E" lineHeight={34} width="fill">310+ known IRD genes (RetNet 2024). No platform combines large cargo, durable expression, and safe redosing. Zero approved therapies for large-gene IRDs.</Text>
+    </Frame>
+
+  </Frame>
+
+  <!-- LAYER 6: Footer -->
+  <Frame id="footer" width="fill" layoutMode="horizontal" counterAxisAlign="center" primaryAxisAlign="space-between">
+    <Text fontFamily="Inter" fontSize={14} fontWeight={400} fill="#8899AA">Non-confidential</Text>
+    <Frame id="page-number" layoutMode="horizontal" gap={10} counterAxisAlign="center">
+      <Rectangle width={28} height={2} fill="#E63946"/>
+      <Text fontFamily="Inter" fontSize={14} fontWeight={400} fill="#8899AA">01</Text>
+    </Frame>
+  </Frame>
+
+</Frame>

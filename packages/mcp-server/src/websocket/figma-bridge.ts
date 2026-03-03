@@ -6,6 +6,7 @@ import type {
   PluginToServerMessage,
   RenderResultMessage,
   SelectionHtmlResultMessage,
+  SelectionSnapshotResultMessage,
   SnapshotResultMessage,
   ValidationResultMessage,
 } from './types.js';
@@ -26,6 +27,7 @@ export class FigmaBridge {
   private renderRequests = new Map<string, PendingRequest<RenderResultMessage>>();
   private snapshotRequests = new Map<string, PendingRequest<SnapshotResultMessage>>();
   private selectionHtmlRequests = new Map<string, PendingRequest<SelectionHtmlResultMessage>>();
+  private selectionSnapshotRequests = new Map<string, PendingRequest<SelectionSnapshotResultMessage>>();
   private validationResults = new Map<string, ValidationResultMessage>();
 
   /**
@@ -131,6 +133,23 @@ export class FigmaBridge {
   }
 
   /**
+   * Request a PNG snapshot of the currently selected Figma element(s).
+   */
+  async takeSelectionSnapshot(): Promise<SelectionSnapshotResultMessage> {
+    this.assertConnected();
+
+    const requestId = crypto.randomUUID();
+    const promise = this.createPendingRequest<SelectionSnapshotResultMessage>(
+      this.selectionSnapshotRequests,
+      requestId,
+    );
+
+    this.send({ type: 'snapshot:selection:request', requestId });
+
+    return promise;
+  }
+
+  /**
    * Request a snapshot and wait for the base64 PNG result.
    */
   async takeSnapshot(slideId: string): Promise<SnapshotResultMessage> {
@@ -170,6 +189,10 @@ export class FigmaBridge {
 
       case 'selection:html:result':
         this.resolvePending(this.selectionHtmlRequests, msg.requestId, msg);
+        break;
+
+      case 'snapshot:selection:result':
+        this.resolvePending(this.selectionSnapshotRequests, msg.requestId, msg);
         break;
     }
   }
@@ -241,5 +264,11 @@ export class FigmaBridge {
       pending.reject(error);
     }
     this.selectionHtmlRequests.clear();
+
+    for (const [, pending] of this.selectionSnapshotRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.selectionSnapshotRequests.clear();
   }
 }

@@ -59,13 +59,19 @@ interface GetSelectionHtmlMessage {
   requestId: string;
 }
 
+interface SnapshotSelectionMessage {
+  type: 'snapshot-selection';
+  requestId: string;
+}
+
 type PluginMessage =
   | RenderMessage
   | RenderBatchMessage
   | RenderDSLMessage
   | ValidateMessage
   | ExportSnapshotMessage
-  | GetSelectionHtmlMessage;
+  | GetSelectionHtmlMessage
+  | SnapshotSelectionMessage;
 
 /**
  * Message types from plugin to UI
@@ -146,6 +152,10 @@ async function handleMessage(msg: PluginMessage) {
         await handleGetSelectionHtml(msg);
         break;
 
+      case 'snapshot-selection':
+        await handleSnapshotSelection(msg);
+        break;
+
       default:
         console.warn('[Yafai Plugin] Unknown message type:', (msg as { type: string }).type);
     }
@@ -214,18 +224,20 @@ async function handleRenderBatch(msg: RenderBatchMessage) {
  * Find an existing slide on the current page by its slide ID
  * Slides are stored as top-level children of the page with plugin data
  */
-async function findExistingSlide(slideId: string): Promise<FrameNode | null> {
-  // Search top-level children of the current page
+async function findExistingSlides(slideId: string): Promise<FrameNode[]> {
+  // Search top-level children of the current page — return ALL matches
+  // so callers can remove every duplicate, not just the first one.
+  const matches: FrameNode[] = [];
   for (const child of figma.currentPage.children) {
     if (child.type === 'FRAME') {
       const storedSlideId = child.getPluginData(PLUGIN_DATA_SLIDE_ID);
       if (storedSlideId === slideId) {
         console.log('[Yafai Plugin] Found existing slide:', slideId, 'node:', child.id);
-        return child;
+        matches.push(child);
       }
     }
   }
-  return null;
+  return matches;
 }
 
 /**
@@ -301,17 +313,19 @@ async function handleRenderDSL(msg: RenderDSLMessage) {
     const primitive = parseDSL(msg.dsl);
     console.log('[Yafai Plugin] Parse successful, primitive type:', primitive.type);
 
-    // Check if a slide with this ID already exists
-    let existingSlide: FrameNode | null = null;
+    // Remove ALL existing slides with this ID (not just the first) to
+    // prevent duplicates from accumulating across re-renders.
     let existingPosition: { x: number; y: number } | null = null;
-    
+
     if (msg.slideId) {
-      existingSlide = await findExistingSlide(msg.slideId);
-      if (existingSlide) {
-        // Save the position so we can place the new slide in the same spot
-        existingPosition = { x: existingSlide.x, y: existingSlide.y };
-        console.log('[Yafai Plugin] Removing existing slide at position:', existingPosition);
-        existingSlide.remove();
+      const existingSlides = await findExistingSlides(msg.slideId);
+      if (existingSlides.length > 0) {
+        // Use the first match's position for placement
+        existingPosition = { x: existingSlides[0].x, y: existingSlides[0].y };
+        console.log('[Yafai Plugin] Removing', existingSlides.length, 'existing slide(s) at position:', existingPosition);
+        for (const slide of existingSlides) {
+          slide.remove();
+        }
       }
     }
 
@@ -357,27 +371,9 @@ async function handleRenderDSL(msg: RenderDSLMessage) {
       });
     }
 
-    // Export PNG snapshot for agent visual feedback
-    if (msg.slideId) {
-      try {
-        const pngBytes = await result.node.exportAsync({
-          format: 'PNG',
-          constraint: { type: 'SCALE', value: 0.5 },
-        });
-        const base64 = figma.base64Encode(pngBytes);
-        console.log('[Yafai Plugin] Snapshot exported:', {
-          slideId: msg.slideId,
-          sizeKB: Math.round(base64.length * 0.75 / 1024),
-        });
-        figma.ui.postMessage({
-          type: 'snapshot-result',
-          slideId: msg.slideId,
-          imageBase64: base64,
-        } as SnapshotResultMessage);
-      } catch (err) {
-        console.error('[Yafai Plugin] Failed to export snapshot:', err);
-      }
-    }
+    // Note: snapshots are taken on-demand via handleExportSnapshot / take_snapshot.
+    // Auto-exporting here was causing confusion — the bridge has no pending
+    // snapshot request at render time, so the message was silently dropped.
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[Yafai Plugin] DSL render failed:', {
@@ -398,7 +394,10 @@ async function handleRenderDSL(msg: RenderDSLMessage) {
  * Handle on-demand snapshot export request (from MCP server)
  */
 async function handleExportSnapshot(msg: ExportSnapshotMessage) {
-  const slideFrame = await findExistingSlide(msg.slideId);
+  const matches = await findExistingSlides(msg.slideId);
+  // Use the LAST match — after a render cycle that removes-then-creates,
+  // the newest slide is appended at the end of the children list.
+  const slideFrame = matches.length > 0 ? matches[matches.length - 1] : null;
   if (!slideFrame) {
     figma.ui.postMessage({
       type: 'error',
@@ -548,6 +547,69 @@ function validateNode(node: SceneNode): ValidationError[] {
  * Handle get-selection-html request (from MCP server)
  * Converts currently selected Figma nodes to HTML with inline CSS.
  */
+/**
+ * Handle snapshot of the current selection
+ */
+async function handleSnapshotSelection(msg: SnapshotSelectionMessage) {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    figma.ui.postMessage({
+      type: 'snapshot-selection-result',
+      requestId: msg.requestId,
+      success: false,
+      error: 'No elements selected. Select one or more elements in Figma first.',
+    });
+    return;
+  }
+
+  try {
+    // If single node, export it directly. If multiple, create a temporary
+    // group so we get one combined screenshot.
+    let exportNode: SceneNode;
+    let tempGroup: GroupNode | null = null;
+
+    if (selection.length === 1) {
+      exportNode = selection[0];
+    } else {
+      // Clone nodes into a temporary group for export, then clean up
+      tempGroup = figma.group([...selection], figma.currentPage);
+      exportNode = tempGroup;
+    }
+
+    const pngBytes = await exportNode.exportAsync({
+      format: 'PNG',
+      constraint: { type: 'SCALE', value: 0.5 },
+    });
+    const base64 = figma.base64Encode(pngBytes);
+
+    // Ungroup if we created a temp group (restores original structure)
+    if (tempGroup) {
+      figma.ungroup(tempGroup);
+    }
+
+    console.log('[Yafai Plugin] Selection snapshot exported:', {
+      requestId: msg.requestId,
+      nodeCount: selection.length,
+      sizeKB: Math.round(base64.length * 0.75 / 1024),
+    });
+
+    figma.ui.postMessage({
+      type: 'snapshot-selection-result',
+      requestId: msg.requestId,
+      success: true,
+      imageBase64: base64,
+      nodeCount: selection.length,
+    });
+  } catch (err) {
+    figma.ui.postMessage({
+      type: 'snapshot-selection-result',
+      requestId: msg.requestId,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function handleGetSelectionHtml(msg: GetSelectionHtmlMessage) {
   const selection = figma.currentPage.selection;
   if (selection.length === 0) {

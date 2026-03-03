@@ -1,0 +1,29 @@
+<Slide id="slide-intro">
+  <!-- Main content wrapper with vertical auto-layout, centered -->
+  <Frame id="content" layoutMode="vertical" gap={80} padding={80} width={1920} height={1080} primaryAxisAlign="center" counterAxisAlign="center" fill="#ffffff">
+
+    <!-- Logo placeholder -->
+    <Frame width={120} height={120} fill="#2563eb" cornerRadius={60} />
+
+    <!-- Company name and tagline -->
+    <Frame layoutMode="vertical" gap={24} counterAxisAlign="center">
+      <Text fontFamily="Inter" fontSize={64} fontWeight={700} fill="#1a1a2e">
+        Acme Corp
+      </Text>
+      <Text fontFamily="Inter" fontSize={24} fontWeight={400} fill="#6b7280">
+        Building the future of pitch decks
+      </Text>
+    </Frame>
+
+    <!-- Metadata -->
+    <Frame layoutMode="vertical" gap={16} counterAxisAlign="center">
+      <Text fontFamily="Inter" fontSize={18} fontWeight={400} fill="#6b7280">
+        Investor Pitch Deck
+      </Text>
+      <Text fontFamily="Inter" fontSize={16} fontWeight={400} fill="#9ca3af">
+        Confidential - February 2026
+      </Text>
+    </Frame>
+
+  </Frame>
+</Slide>

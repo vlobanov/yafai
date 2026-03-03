@@ -1,0 +1,21 @@
+<Slide fill="#F8F9FB">
+  <Frame
+    x={0} y={400}
+    width={1920}
+    layoutMode="vertical"
+    counterAxisAlign="center"
+    gap={24}
+  >
+    <Rectangle width={80} height={4} fill="#DC3C44" cornerRadius={2} />
+
+    <Text fontFamily="Inter" fontSize={72} fontWeight={700} fill="#1D1D1D" textAlignHorizontal="CENTER">
+      reactosome
+    </Text>
+
+    <Text fontFamily="Inter" fontSize={20} fontWeight={400} fill="#6B7280" textAlignHorizontal="CENTER" letterSpacing={6}>
+      BUILDING THE FUTURE
+    </Text>
+
+    <Rectangle width={80} height={4} fill="#DC3C44" cornerRadius={2} />
+  </Frame>
+</Slide>

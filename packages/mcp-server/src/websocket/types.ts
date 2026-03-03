@@ -34,10 +34,16 @@ export interface SelectionHtmlRequestMessage {
   requestId: string;
 }
 
+export interface SelectionSnapshotRequestMessage {
+  type: 'snapshot:selection:request';
+  requestId: string;
+}
+
 export type ServerToPluginMessage =
   | RenderSlideMessage
   | SnapshotRequestMessage
-  | SelectionHtmlRequestMessage;
+  | SelectionHtmlRequestMessage
+  | SelectionSnapshotRequestMessage;
 
 // ============================================================================
 // Plugin -> Server
@@ -76,9 +82,19 @@ export interface SelectionHtmlResultMessage {
   error?: string;
 }
 
+export interface SelectionSnapshotResultMessage {
+  type: 'snapshot:selection:result';
+  requestId: string;
+  success: boolean;
+  imageBase64?: string;
+  nodeCount?: number;
+  error?: string;
+}
+
 export type PluginToServerMessage =
   | PluginReadyMessage
   | RenderResultMessage
   | ValidationResultMessage
   | SnapshotResultMessage
-  | SelectionHtmlResultMessage;
+  | SelectionHtmlResultMessage
+  | SelectionSnapshotResultMessage;

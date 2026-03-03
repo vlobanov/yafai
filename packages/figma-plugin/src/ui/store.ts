@@ -159,6 +159,18 @@ export function setupPluginListener(): () => void {
         });
         break;
 
+      case 'snapshot-selection-result':
+        console.log('[Yafai UI] Selection snapshot result:', msg.requestId);
+        wsClient.sendToWs({
+          type: 'snapshot:selection:result',
+          requestId: msg.requestId,
+          success: msg.success,
+          imageBase64: msg.imageBase64,
+          nodeCount: msg.nodeCount,
+          error: msg.error,
+        });
+        break;
+
       case 'error':
         console.error('[Yafai UI] Plugin error:', msg.message);
         break;

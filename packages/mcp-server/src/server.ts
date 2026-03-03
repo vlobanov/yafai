@@ -231,7 +231,60 @@ export function createMcpServer(bridge: FigmaBridge): McpServer {
   );
 
   // ────────────────────────────────────────────────────────────────────
-  // 6. get_selection_html
+  // 6. take_selection_snapshot
+  // ────────────────────────────────────────────────────────────────────
+  mcp.tool(
+    'take_selection_snapshot',
+    'Export a PNG screenshot of the currently selected Figma element(s). Select a frame in Figma first, then call this to capture a visual snapshot.',
+    {},
+    async () => {
+      try {
+        const result = await bridge.takeSelectionSnapshot();
+
+        if (!result.success) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+            isError: true,
+          };
+        }
+
+        // Save to design/screenshots/
+        const snapshotsDir = path.join(sessions.getProjectRoot(), 'design', 'screenshots');
+        fs.mkdirSync(snapshotsDir, { recursive: true });
+
+        const timestamp = Date.now();
+        const savePath = path.join(snapshotsDir, `selection-${timestamp}.png`);
+
+        const buffer = Buffer.from(result.imageBase64!, 'base64');
+        fs.writeFileSync(savePath, buffer);
+
+        const relativePath = sessions.toProjectRelative(savePath);
+        log.info(`Selection snapshot saved: ${relativePath} (${Math.round(buffer.length / 1024)}KB)`);
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                { path: relativePath, nodeCount: result.nodeCount, sizeKB: Math.round(buffer.length / 1024) },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: 'text' as const, text: `Selection snapshot failed: ${message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ────────────────────────────────────────────────────────────────────
+  // 7. get_selection_html
   // ────────────────────────────────────────────────────────────────────
   mcp.tool(
     'get_selection_html',
