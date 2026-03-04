@@ -34,6 +34,9 @@ export interface RenderOptions {
 
   /** Whether to select the rendered nodes */
   select?: boolean;
+
+  /** Whether to scroll the viewport to the rendered node (default: true when select is true) */
+  scrollIntoView?: boolean;
 }
 
 /**

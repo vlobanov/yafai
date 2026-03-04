@@ -174,6 +174,15 @@ export interface TextProps {
 
   /** Stroke weight */
   strokeWeight?: number;
+
+  /** Per-side stroke weights */
+  strokeTopWeight?: number;
+  strokeRightWeight?: number;
+  strokeBottomWeight?: number;
+  strokeLeftWeight?: number;
+
+  /** Stroke alignment */
+  strokeAlign?: string;
 }
 
 /**

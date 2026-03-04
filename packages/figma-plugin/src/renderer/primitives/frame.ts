@@ -84,6 +84,13 @@ export async function renderFrame(
     }
   }
 
+  // Per-side stroke weights (Figma supports individual side weights on frames)
+  const f = frame as any;
+  if (f.strokeTopWeight !== undefined) node.strokeTopWeight = f.strokeTopWeight;
+  if (f.strokeRightWeight !== undefined) node.strokeRightWeight = f.strokeRightWeight;
+  if (f.strokeBottomWeight !== undefined) node.strokeBottomWeight = f.strokeBottomWeight;
+  if (f.strokeLeftWeight !== undefined) node.strokeLeftWeight = f.strokeLeftWeight;
+
   // Corner radius
   if (frame.cornerRadius !== undefined) {
     if (typeof frame.cornerRadius === 'number') {

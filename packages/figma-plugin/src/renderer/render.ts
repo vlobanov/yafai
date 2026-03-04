@@ -3,14 +3,18 @@
  */
 
 import type { Primitive } from '@yafai/primitives';
+import { renderBooleanOperation } from './primitives/boolean-op.js';
 import { renderFrame } from './primitives/frame.js';
 import { renderGroup } from './primitives/group.js';
+import { renderLine } from './primitives/line.js';
+import { renderPolygon } from './primitives/polygon.js';
 import {
   renderEllipse,
   renderImage,
   renderRectangle,
   renderVector,
 } from './primitives/shapes.js';
+import { renderStar } from './primitives/star.js';
 import { renderText } from './primitives/text.js';
 import type { RenderContext, RenderOptions, RenderResult } from './types.js';
 import { createRenderContext } from './types.js';
@@ -43,6 +47,18 @@ export async function renderPrimitive(
 
     case 'group':
       return renderGroup(primitive, ctx);
+
+    case 'line':
+      return renderLine(primitive, ctx);
+
+    case 'star':
+      return renderStar(primitive, ctx);
+
+    case 'polygon':
+      return renderPolygon(primitive, ctx);
+
+    case 'boolean-operation':
+      return renderBooleanOperation(primitive, ctx);
 
     default:
       ctx.warnings.push({
@@ -91,7 +107,10 @@ export async function render(
   // Select if requested
   if (options.select) {
     figma.currentPage.selection = [node];
-    figma.viewport.scrollAndZoomIntoView([node]);
+    // Only scroll viewport when explicitly requested (default: true for new slides)
+    if (options.scrollIntoView !== false) {
+      figma.viewport.scrollAndZoomIntoView([node]);
+    }
   }
 
   return {

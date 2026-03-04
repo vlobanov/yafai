@@ -16,7 +16,11 @@ export type PrimitiveType =
   | 'ellipse'
   | 'vector'
   | 'group'
-  | 'image';
+  | 'image'
+  | 'line'
+  | 'star'
+  | 'polygon'
+  | 'boolean-operation';
 
 /**
  * Base properties for all scene nodes

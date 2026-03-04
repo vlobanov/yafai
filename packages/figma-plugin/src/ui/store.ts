@@ -171,6 +171,45 @@ export function setupPluginListener(): () => void {
         });
         break;
 
+      case 'selection-dsl-result':
+        console.log('[Yafai UI] Selection DSL result:', msg.requestId);
+        wsClient.sendToWs({
+          type: 'selection:dsl:result',
+          requestId: msg.requestId,
+          success: msg.success,
+          dsl: msg.dsl,
+          nodeCount: msg.nodeCount,
+          error: msg.error,
+        });
+        break;
+
+      case 'get-node-result':
+        console.log('[Yafai UI] Get node result:', msg.requestId);
+        wsClient.sendToWs({
+          type: 'node:get:result',
+          requestId: msg.requestId,
+          success: msg.success,
+          dsl: msg.dsl,
+          nodeId: msg.nodeId,
+          nodeName: msg.nodeName,
+          nodeType: msg.nodeType,
+          error: msg.error,
+        });
+        break;
+
+      case 'update-node-result':
+        console.log('[Yafai UI] Update node result:', msg.requestId);
+        wsClient.sendToWs({
+          type: 'node:update:result',
+          requestId: msg.requestId,
+          success: msg.success,
+          nodeId: msg.nodeId,
+          updatedProperties: msg.updatedProperties,
+          dsl: msg.dsl,
+          error: msg.error,
+        });
+        break;
+
       case 'error':
         console.error('[Yafai UI] Plugin error:', msg.message);
         break;

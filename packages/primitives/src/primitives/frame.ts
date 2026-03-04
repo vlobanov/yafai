@@ -49,6 +49,15 @@ export interface FrameProps {
   /** Stroke weight (when using stroke shorthand) */
   strokeWeight?: number;
 
+  /** Per-side stroke weights */
+  strokeTopWeight?: number;
+  strokeRightWeight?: number;
+  strokeBottomWeight?: number;
+  strokeLeftWeight?: number;
+
+  /** Stroke alignment */
+  strokeAlign?: string;
+
   // ═══════════════════════════════════════════════════════════
   // CORNER RADIUS
   // ═══════════════════════════════════════════════════════════

@@ -8,9 +8,11 @@
  * - Validation of rendered output
  */
 
-import { type Primitive, parseDSL } from '@yafai/primitives';
+import { type Primitive, parseDSL, serializeDSL } from '@yafai/primitives';
 import { render, renderAll } from './renderer/index.js';
 import { nodeToHtml } from './converter/node-to-html.js';
+import { nodeToPrimitive } from './converter/node-to-primitive.js';
+import { applyDSLProperties } from './converter/apply-properties.js';
 
 // Plugin configuration
 const PLUGIN_WIDTH = 400;
@@ -64,6 +66,24 @@ interface SnapshotSelectionMessage {
   requestId: string;
 }
 
+interface GetSelectionDslMessage {
+  type: 'get-selection-dsl';
+  requestId: string;
+}
+
+interface GetNodeMessage {
+  type: 'get-node';
+  requestId: string;
+  nodeId: string;
+}
+
+interface UpdateNodeMessage {
+  type: 'update-node';
+  requestId: string;
+  nodeId: string;
+  properties: Record<string, unknown>;
+}
+
 type PluginMessage =
   | RenderMessage
   | RenderBatchMessage
@@ -71,7 +91,10 @@ type PluginMessage =
   | ValidateMessage
   | ExportSnapshotMessage
   | GetSelectionHtmlMessage
-  | SnapshotSelectionMessage;
+  | SnapshotSelectionMessage
+  | GetSelectionDslMessage
+  | GetNodeMessage
+  | UpdateNodeMessage;
 
 /**
  * Message types from plugin to UI
@@ -156,6 +179,18 @@ async function handleMessage(msg: PluginMessage) {
         await handleSnapshotSelection(msg);
         break;
 
+      case 'get-selection-dsl':
+        await handleGetSelectionDsl(msg);
+        break;
+
+      case 'get-node':
+        await handleGetNode(msg);
+        break;
+
+      case 'update-node':
+        await handleUpdateNode(msg);
+        break;
+
       default:
         console.warn('[Yafai Plugin] Unknown message type:', (msg as { type: string }).type);
     }
@@ -225,17 +260,31 @@ async function handleRenderBatch(msg: RenderBatchMessage) {
  * Slides are stored as top-level children of the page with plugin data
  */
 async function findExistingSlides(slideId: string): Promise<FrameNode[]> {
-  // Search top-level children of the current page — return ALL matches
-  // so callers can remove every duplicate, not just the first one.
+  // Search ALL nodes on the current page — not just top-level children.
+  // Users may organize slides into sections or accidentally nest them.
   const matches: FrameNode[] = [];
-  for (const child of figma.currentPage.children) {
-    if (child.type === 'FRAME') {
-      const storedSlideId = child.getPluginData(PLUGIN_DATA_SLIDE_ID);
-      if (storedSlideId === slideId) {
-        console.log('[Yafai Plugin] Found existing slide:', slideId, 'node:', child.id);
-        matches.push(child);
+
+  function searchNode(node: BaseNode) {
+    if (node.type === 'FRAME' || node.type === 'SECTION') {
+      if (node.type === 'FRAME') {
+        const storedSlideId = node.getPluginData(PLUGIN_DATA_SLIDE_ID);
+        if (storedSlideId === slideId) {
+          console.log('[Yafai Plugin] Found existing slide:', slideId, 'node:', node.id);
+          matches.push(node);
+          return; // Don't search children of a matched slide
+        }
+      }
+      // Search children of sections and non-matching frames
+      if ('children' in node) {
+        for (const child of (node as ChildrenMixin).children) {
+          searchNode(child);
+        }
       }
     }
+  }
+
+  for (const child of figma.currentPage.children) {
+    searchNode(child);
   }
   return matches;
 }
@@ -316,13 +365,25 @@ async function handleRenderDSL(msg: RenderDSLMessage) {
     // Remove ALL existing slides with this ID (not just the first) to
     // prevent duplicates from accumulating across re-renders.
     let existingPosition: { x: number; y: number } | null = null;
+    let existingParent: (BaseNode & ChildrenMixin) | null = null;
+    let existingIndex: number | null = null;
+    let isUpdate = false;
 
     if (msg.slideId) {
       const existingSlides = await findExistingSlides(msg.slideId);
       if (existingSlides.length > 0) {
-        // Use the first match's position for placement
-        existingPosition = { x: existingSlides[0].x, y: existingSlides[0].y };
-        console.log('[Yafai Plugin] Removing', existingSlides.length, 'existing slide(s) at position:', existingPosition);
+        isUpdate = true;
+        const first = existingSlides[0];
+        // Capture position relative to parent
+        existingPosition = { x: first.x, y: first.y };
+        // Capture parent so we can re-insert in the same container
+        if (first.parent && first.parent !== figma.currentPage) {
+          existingParent = first.parent as BaseNode & ChildrenMixin;
+          // Find index within parent to preserve ordering
+          const siblings = existingParent.children;
+          existingIndex = siblings.findIndex((c: SceneNode) => c.id === first.id);
+        }
+        console.log('[Yafai Plugin] Removing', existingSlides.length, 'existing slide(s) at position:', existingPosition, 'parent:', existingParent?.name || 'page');
         for (const slide of existingSlides) {
           slide.remove();
         }
@@ -331,11 +392,35 @@ async function handleRenderDSL(msg: RenderDSLMessage) {
 
     // Render to Figma
     console.log('[Yafai Plugin] Rendering to Figma...');
-    const result = await render(primitive, { 
+    const result = await render(primitive, {
       select: true,
+      scrollIntoView: !isUpdate, // Only scroll on first render, not updates
       x: existingPosition?.x,
       y: existingPosition?.y,
     });
+
+    // Re-insert into the same parent container if it was nested
+    if (existingParent && existingParent.id) {
+      try {
+        // Check parent still exists (might have been removed)
+        if ('children' in existingParent) {
+          if (existingIndex !== null && existingIndex < existingParent.children.length) {
+            // Insert at the same position within the parent
+            existingParent.insertChild(existingIndex, result.node as SceneNode);
+          } else {
+            existingParent.appendChild(result.node as SceneNode);
+          }
+          // Re-apply position (insertChild resets it)
+          if (existingPosition) {
+            result.node.x = existingPosition.x;
+            result.node.y = existingPosition.y;
+          }
+        }
+      } catch (e) {
+        console.warn('[Yafai Plugin] Could not re-insert into parent:', e);
+        // Frame stays at page level — acceptable fallback
+      }
+    }
     console.log('[Yafai Plugin] Render successful, nodeId:', result.node.id);
 
     // Store slide ID in plugin data so we can find it later
@@ -643,6 +728,171 @@ async function handleGetSelectionHtml(msg: GetSelectionHtmlMessage) {
   } catch (err) {
     figma.ui.postMessage({
       type: 'selection-html-result',
+      requestId: msg.requestId,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Handle get-selection-dsl request (from MCP server)
+ * Converts currently selected Figma nodes to DSL XML.
+ */
+async function handleGetSelectionDsl(msg: GetSelectionDslMessage) {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    figma.ui.postMessage({
+      type: 'selection-dsl-result',
+      requestId: msg.requestId,
+      success: false,
+      error: 'No elements selected. Select one or more elements in Figma first.',
+    });
+    return;
+  }
+
+  try {
+    const dslParts: string[] = [];
+    for (const node of selection) {
+      const primitive = await nodeToPrimitive(node);
+      if (primitive) {
+        dslParts.push(serializeDSL(primitive));
+      }
+    }
+
+    const dsl =
+      selection.length === 1
+        ? dslParts[0]
+        : dslParts.join('\n\n');
+
+    figma.ui.postMessage({
+      type: 'selection-dsl-result',
+      requestId: msg.requestId,
+      success: true,
+      dsl,
+      nodeCount: selection.length,
+    });
+  } catch (err) {
+    figma.ui.postMessage({
+      type: 'selection-dsl-result',
+      requestId: msg.requestId,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Handle get-node request — read a single Figma node by ID and return DSL
+ */
+async function handleGetNode(msg: GetNodeMessage) {
+  try {
+    const node = await figma.getNodeByIdAsync(msg.nodeId);
+
+    if (!node) {
+      figma.ui.postMessage({
+        type: 'get-node-result',
+        requestId: msg.requestId,
+        success: false,
+        error: `Node not found: ${msg.nodeId}`,
+      });
+      return;
+    }
+
+    if (!('type' in node) || node.type === 'PAGE' || node.type === 'DOCUMENT') {
+      figma.ui.postMessage({
+        type: 'get-node-result',
+        requestId: msg.requestId,
+        success: false,
+        error: `Node type not supported: ${node.type}`,
+      });
+      return;
+    }
+
+    const primitive = await nodeToPrimitive(node as SceneNode);
+    if (!primitive) {
+      figma.ui.postMessage({
+        type: 'get-node-result',
+        requestId: msg.requestId,
+        success: false,
+        error: `Could not convert node to DSL: ${node.type}`,
+      });
+      return;
+    }
+
+    const dsl = serializeDSL(primitive);
+
+    figma.ui.postMessage({
+      type: 'get-node-result',
+      requestId: msg.requestId,
+      success: true,
+      dsl,
+      nodeId: node.id,
+      nodeName: node.name,
+      nodeType: node.type,
+    });
+  } catch (err) {
+    figma.ui.postMessage({
+      type: 'get-node-result',
+      requestId: msg.requestId,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Handle update-node request — apply DSL properties to a live Figma node
+ */
+async function handleUpdateNode(msg: UpdateNodeMessage) {
+  try {
+    const node = await figma.getNodeByIdAsync(msg.nodeId);
+
+    if (!node) {
+      figma.ui.postMessage({
+        type: 'update-node-result',
+        requestId: msg.requestId,
+        success: false,
+        error: `Node not found: ${msg.nodeId}`,
+      });
+      return;
+    }
+
+    if (!('type' in node) || node.type === 'PAGE' || node.type === 'DOCUMENT') {
+      figma.ui.postMessage({
+        type: 'update-node-result',
+        requestId: msg.requestId,
+        success: false,
+        error: `Node type not supported for updates: ${node.type}`,
+      });
+      return;
+    }
+
+    const sceneNode = node as SceneNode;
+    const updatedProperties = await applyDSLProperties(sceneNode, msg.properties);
+
+    // Return the updated DSL so the caller can see the result
+    let dsl: string | undefined;
+    try {
+      const primitive = await nodeToPrimitive(sceneNode);
+      if (primitive) {
+        dsl = serializeDSL(primitive);
+      }
+    } catch {
+      // Non-fatal — we still report the update as successful
+    }
+
+    figma.ui.postMessage({
+      type: 'update-node-result',
+      requestId: msg.requestId,
+      success: true,
+      nodeId: node.id,
+      updatedProperties,
+      dsl,
+    });
+  } catch (err) {
+    figma.ui.postMessage({
+      type: 'update-node-result',
       requestId: msg.requestId,
       success: false,
       error: err instanceof Error ? err.message : String(err),

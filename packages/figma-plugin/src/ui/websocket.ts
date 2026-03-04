@@ -25,7 +25,25 @@ interface McpSelectionSnapshotRequest {
   requestId: string;
 }
 
-type McpServerMessage = McpRenderSlide | McpSnapshotRequest | McpSelectionHtmlRequest | McpSelectionSnapshotRequest;
+interface McpSelectionDslRequest {
+  type: 'selection:dsl:request';
+  requestId: string;
+}
+
+interface McpGetNodeRequest {
+  type: 'node:get:request';
+  requestId: string;
+  nodeId: string;
+}
+
+interface McpUpdateNodeRequest {
+  type: 'node:update:request';
+  requestId: string;
+  nodeId: string;
+  properties: Record<string, unknown>;
+}
+
+type McpServerMessage = McpRenderSlide | McpSnapshotRequest | McpSelectionHtmlRequest | McpSelectionSnapshotRequest | McpSelectionDslRequest | McpGetNodeRequest | McpUpdateNodeRequest;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WEBSOCKET CLIENT
@@ -149,6 +167,33 @@ class WebSocketClient {
         postToPlugin({
           type: 'snapshot-selection',
           requestId: message.requestId,
+        });
+        break;
+
+      case 'selection:dsl:request':
+        console.log('[MCP] Selection DSL requested:', message.requestId);
+        postToPlugin({
+          type: 'get-selection-dsl',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'node:get:request':
+        console.log('[MCP] Get node requested:', message.nodeId);
+        postToPlugin({
+          type: 'get-node',
+          requestId: message.requestId,
+          nodeId: message.nodeId,
+        });
+        break;
+
+      case 'node:update:request':
+        console.log('[MCP] Update node requested:', message.nodeId);
+        postToPlugin({
+          type: 'update-node',
+          requestId: message.requestId,
+          nodeId: message.nodeId,
+          properties: message.properties,
         });
         break;
     }

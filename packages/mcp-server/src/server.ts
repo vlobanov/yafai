@@ -314,5 +314,119 @@ export function createMcpServer(bridge: FigmaBridge): McpServer {
     },
   );
 
+  // ────────────────────────────────────────────────────────────────────
+  // 8. get_selection_dsl
+  // ────────────────────────────────────────────────────────────────────
+  mcp.tool(
+    'get_selection_dsl',
+    'Get the currently selected Figma element(s) as DSL XML. Select a frame in Figma first, then call this to extract its structure as editable DSL.',
+    {},
+    async () => {
+      try {
+        const result = await bridge.getSelectionDsl();
+
+        if (!result.success) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [{ type: 'text' as const, text: result.dsl ?? 'No DSL generated' }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: 'text' as const, text: `Selection DSL failed: ${message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ────────────────────────────────────────────────────────────────────
+  // 9. get_node
+  // ────────────────────────────────────────────────────────────────────
+  mcp.tool(
+    'get_node',
+    'Read a single Figma node by its ID and return its DSL XML representation. Use node IDs from get_selection_dsl output.',
+    {
+      nodeId: z.string().describe('Figma node ID (e.g. "50:759")'),
+    },
+    async ({ nodeId }) => {
+      try {
+        const result = await bridge.getNode(nodeId);
+
+        if (!result.success) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+            isError: true,
+          };
+        }
+
+        const response = {
+          nodeId: result.nodeId,
+          nodeName: result.nodeName,
+          nodeType: result.nodeType,
+          dsl: result.dsl,
+        };
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: 'text' as const, text: `get_node failed: ${message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ────────────────────────────────────────────────────────────────────
+  // 10. update_node
+  // ────────────────────────────────────────────────────────────────────
+  mcp.tool(
+    'update_node',
+    'Update properties on a specific Figma node without re-rendering the whole slide. Use node IDs from get_selection_dsl output.',
+    {
+      nodeId: z.string().describe('Figma node ID (e.g. "50:759")'),
+      properties: z.record(z.unknown()).describe('DSL properties to update (e.g. {"fill": "#FF0000", "opacity": 0.5, "width": 200})'),
+    },
+    async ({ nodeId, properties }) => {
+      try {
+        const result = await bridge.updateNode(nodeId, properties);
+
+        if (!result.success) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+            isError: true,
+          };
+        }
+
+        const response: Record<string, unknown> = {
+          nodeId: result.nodeId,
+          updatedProperties: result.updatedProperties,
+        };
+
+        if (result.dsl) {
+          response.dsl = result.dsl;
+        }
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: 'text' as const, text: `update_node failed: ${message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   return mcp;
 }

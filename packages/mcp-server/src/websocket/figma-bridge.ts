@@ -3,11 +3,14 @@ import type http from 'node:http';
 import { log } from '../util/logger.js';
 import crypto from 'node:crypto';
 import type {
+  GetNodeResultMessage,
   PluginToServerMessage,
   RenderResultMessage,
+  SelectionDslResultMessage,
   SelectionHtmlResultMessage,
   SelectionSnapshotResultMessage,
   SnapshotResultMessage,
+  UpdateNodeResultMessage,
   ValidationResultMessage,
 } from './types.js';
 
@@ -28,6 +31,9 @@ export class FigmaBridge {
   private snapshotRequests = new Map<string, PendingRequest<SnapshotResultMessage>>();
   private selectionHtmlRequests = new Map<string, PendingRequest<SelectionHtmlResultMessage>>();
   private selectionSnapshotRequests = new Map<string, PendingRequest<SelectionSnapshotResultMessage>>();
+  private selectionDslRequests = new Map<string, PendingRequest<SelectionDslResultMessage>>();
+  private getNodeRequests = new Map<string, PendingRequest<GetNodeResultMessage>>();
+  private updateNodeRequests = new Map<string, PendingRequest<UpdateNodeResultMessage>>();
   private validationResults = new Map<string, ValidationResultMessage>();
 
   /**
@@ -150,6 +156,57 @@ export class FigmaBridge {
   }
 
   /**
+   * Request DSL XML representation of the currently selected Figma element(s).
+   */
+  async getSelectionDsl(): Promise<SelectionDslResultMessage> {
+    this.assertConnected();
+
+    const requestId = crypto.randomUUID();
+    const promise = this.createPendingRequest<SelectionDslResultMessage>(
+      this.selectionDslRequests,
+      requestId,
+    );
+
+    this.send({ type: 'selection:dsl:request', requestId });
+
+    return promise;
+  }
+
+  /**
+   * Read a single Figma node by its ID and return its DSL XML.
+   */
+  async getNode(nodeId: string): Promise<GetNodeResultMessage> {
+    this.assertConnected();
+
+    const requestId = crypto.randomUUID();
+    const promise = this.createPendingRequest<GetNodeResultMessage>(
+      this.getNodeRequests,
+      requestId,
+    );
+
+    this.send({ type: 'node:get:request', requestId, nodeId });
+
+    return promise;
+  }
+
+  /**
+   * Update properties on a specific Figma node without re-rendering.
+   */
+  async updateNode(nodeId: string, properties: Record<string, unknown>): Promise<UpdateNodeResultMessage> {
+    this.assertConnected();
+
+    const requestId = crypto.randomUUID();
+    const promise = this.createPendingRequest<UpdateNodeResultMessage>(
+      this.updateNodeRequests,
+      requestId,
+    );
+
+    this.send({ type: 'node:update:request', requestId, nodeId, properties });
+
+    return promise;
+  }
+
+  /**
    * Request a snapshot and wait for the base64 PNG result.
    */
   async takeSnapshot(slideId: string): Promise<SnapshotResultMessage> {
@@ -193,6 +250,18 @@ export class FigmaBridge {
 
       case 'snapshot:selection:result':
         this.resolvePending(this.selectionSnapshotRequests, msg.requestId, msg);
+        break;
+
+      case 'selection:dsl:result':
+        this.resolvePending(this.selectionDslRequests, msg.requestId, msg);
+        break;
+
+      case 'node:get:result':
+        this.resolvePending(this.getNodeRequests, msg.requestId, msg);
+        break;
+
+      case 'node:update:result':
+        this.resolvePending(this.updateNodeRequests, msg.requestId, msg);
         break;
     }
   }
@@ -270,5 +339,23 @@ export class FigmaBridge {
       pending.reject(error);
     }
     this.selectionSnapshotRequests.clear();
+
+    for (const [, pending] of this.selectionDslRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.selectionDslRequests.clear();
+
+    for (const [, pending] of this.getNodeRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.getNodeRequests.clear();
+
+    for (const [, pending] of this.updateNodeRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.updateNodeRequests.clear();
   }
 }

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { type ParseWarning, ParseError, parseDSL, serializeDSL } from './parser.js';
+import { comparePrimitives } from './compare.js';
 import type { Text } from './primitives/text.js';
+import type { Frame } from './primitives/frame.js';
+import type { BooleanOperation, Line, Polygon, Star } from './primitives/shapes.js';
 
 describe('parseDSL', () => {
   describe('basic primitives', () => {
@@ -641,6 +644,293 @@ describe('parseDSL', () => {
       expect(serialized).toContain('<I>');
       const reparsed = parseDSL(serialized) as Text;
       expect(reparsed.text).toBe('Normal bold italic end');
+    });
+  });
+
+  describe('new primitive types', () => {
+    it('parses Line', () => {
+      const dsl = '<Line width={200} height={2} stroke="#000000" strokeWeight={2} />';
+      const result = parseDSL(dsl) as Line;
+
+      expect(result.type).toBe('line');
+      expect(result.width).toBe(200);
+      expect(result.stroke).toBe('#000000');
+      expect(result.strokeWeight).toBe(2);
+    });
+
+    it('parses Star', () => {
+      const dsl = '<Star width={100} height={100} fill="#FFD700" pointCount={5} innerRadius={0.4} />';
+      const result = parseDSL(dsl) as Star;
+
+      expect(result.type).toBe('star');
+      expect(result.pointCount).toBe(5);
+      expect(result.innerRadius).toBe(0.4);
+      expect(result.fill).toBe('#FFD700');
+    });
+
+    it('parses Polygon', () => {
+      const dsl = '<Polygon width={100} height={100} fill="#00FF00" pointCount={6} />';
+      const result = parseDSL(dsl) as Polygon;
+
+      expect(result.type).toBe('polygon');
+      expect(result.pointCount).toBe(6);
+    });
+
+    it('parses BooleanOperation', () => {
+      const dsl = `
+        <BooleanOperation operation="subtract" fill="#FF0000">
+          <Rectangle width={100} height={100} fill="#0000FF" />
+          <Ellipse width={60} height={60} fill="#00FF00" />
+        </BooleanOperation>
+      `;
+      const result = parseDSL(dsl) as BooleanOperation;
+
+      expect(result.type).toBe('boolean-operation');
+      expect(result.operation).toBe('subtract');
+      expect(result.children).toHaveLength(2);
+      expect((result.children[0] as any).type).toBe('rectangle');
+      expect((result.children[1] as any).type).toBe('ellipse');
+    });
+
+    it('serializes and re-parses Line', () => {
+      const dsl = '<Line width={200} height={2} stroke="#000000" strokeWeight={2} />';
+      const parsed = parseDSL(dsl);
+      const serialized = serializeDSL(parsed);
+      const reparsed = parseDSL(serialized) as Line;
+
+      expect(reparsed.type).toBe('line');
+      expect(reparsed.width).toBe(200);
+      expect(reparsed.stroke).toBe('#000000');
+    });
+
+    it('serializes and re-parses Star', () => {
+      const dsl = '<Star width={100} height={100} fill="#FFD700" pointCount={5} innerRadius={0.4} />';
+      const parsed = parseDSL(dsl);
+      const serialized = serializeDSL(parsed);
+      const reparsed = parseDSL(serialized) as Star;
+
+      expect(reparsed.type).toBe('star');
+      expect(reparsed.pointCount).toBe(5);
+      expect(reparsed.innerRadius).toBe(0.4);
+    });
+
+    it('serializes and re-parses BooleanOperation', () => {
+      const dsl = `
+        <BooleanOperation operation="intersect">
+          <Rectangle width={100} height={100} />
+          <Ellipse width={80} height={80} />
+        </BooleanOperation>
+      `;
+      const parsed = parseDSL(dsl);
+      const serialized = serializeDSL(parsed);
+      const reparsed = parseDSL(serialized) as BooleanOperation;
+
+      expect(reparsed.type).toBe('boolean-operation');
+      expect(reparsed.operation).toBe('intersect');
+      expect(reparsed.children).toHaveLength(2);
+    });
+  });
+
+  describe('extended property parsing', () => {
+    it('parses Frame with effects as JSON', () => {
+      const dsl = '<Frame width={100} height={100} effects={[{"type":"drop-shadow","color":"#00000040","offset":{"x":0,"y":4},"blur":8}]} />';
+      const result = parseDSL(dsl) as Frame;
+
+      expect(result.effects).toHaveLength(1);
+      expect(result.effects![0].type).toBe('drop-shadow');
+    });
+
+    it('parses Frame with constraints', () => {
+      const dsl = '<Frame width={100} height={100} constraintH="stretch" constraintV="center" />';
+      const result = parseDSL(dsl) as Frame;
+
+      expect(result.constraints).toEqual({ horizontal: 'stretch', vertical: 'center' });
+    });
+
+    it('parses Frame with cornerSmoothing', () => {
+      const dsl = '<Frame width={100} height={100} cornerSmoothing={0.6} />';
+      const result = parseDSL(dsl) as Frame;
+
+      expect(result.cornerSmoothing).toBe(0.6);
+    });
+
+    it('parses Frame with min/max dimensions', () => {
+      const dsl = '<Frame minWidth={50} maxWidth={500} minHeight={30} maxHeight={300} />';
+      const result = parseDSL(dsl) as Frame;
+
+      expect(result.minWidth).toBe(50);
+      expect(result.maxWidth).toBe(500);
+      expect(result.minHeight).toBe(30);
+      expect(result.maxHeight).toBe(300);
+    });
+
+    it('parses Text with lineHeight as number', () => {
+      const dsl = '<Text lineHeight={24}>Hello</Text>';
+      const result = parseDSL(dsl) as Text;
+
+      expect(result.lineHeight).toBe(24);
+    });
+
+    it('parses Text with lineHeight as percentage', () => {
+      const dsl = '<Text lineHeight="150%">Hello</Text>';
+      const result = parseDSL(dsl) as Text;
+
+      expect(result.lineHeight).toBe('150%');
+    });
+
+    it('parses Text with lineHeight as auto', () => {
+      const dsl = '<Text lineHeight="auto">Hello</Text>';
+      const result = parseDSL(dsl) as Text;
+
+      expect(result.lineHeight).toBe('auto');
+    });
+
+    it('parses Text with letterSpacing as number', () => {
+      const dsl = '<Text letterSpacing={1.5}>Hello</Text>';
+      const result = parseDSL(dsl) as Text;
+
+      expect(result.letterSpacing).toBe(1.5);
+    });
+
+    it('parses Text with letterSpacing as percentage', () => {
+      const dsl = '<Text letterSpacing="5%">Hello</Text>';
+      const result = parseDSL(dsl) as Text;
+
+      expect(result.letterSpacing).toBe('5%');
+    });
+
+    it('parses Rectangle with per-corner cornerRadius', () => {
+      const dsl = '<Rectangle width={100} height={100} cornerRadius={[8,16,8,16]} />';
+      const result = parseDSL(dsl);
+
+      expect((result as any).cornerRadius).toEqual([8, 16, 8, 16]);
+    });
+
+    it('parses locked and blendMode', () => {
+      const dsl = '<Frame width={100} height={100} locked={true} blendMode="multiply" />';
+      const result = parseDSL(dsl) as Frame;
+
+      expect(result.locked).toBe(true);
+      expect(result.blendMode).toBe('multiply');
+    });
+
+    it('parses fills as JSON array', () => {
+      const dsl = '<Frame width={100} height={100} fills={[{"type":"solid","color":"#FF0000"}]} />';
+      const result = parseDSL(dsl) as Frame;
+
+      expect(result.fills).toHaveLength(1);
+      expect(result.fills![0]).toEqual({ type: 'solid', color: '#FF0000' });
+    });
+  });
+
+  describe('roundtrip: parse → serialize → parse', () => {
+    it('roundtrips a Frame with all common properties', () => {
+      const dsl = '<Frame id="test" width={400} height={300} fill="#ffffff" layoutMode="vertical" gap={24} padding={16} cornerRadius={8} opacity={0.9} rotation={45} />';
+      const a = parseDSL(dsl);
+      const serialized = serializeDSL(a);
+      const b = parseDSL(serialized);
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs).toEqual([]);
+    });
+
+    it('roundtrips Text with segments', () => {
+      const dsl = '<Text fontSize={16} fill="#333333">Hello <B>bold</B> and <I>italic</I> text</Text>';
+      const a = parseDSL(dsl);
+      const serialized = serializeDSL(a);
+      const b = parseDSL(serialized);
+
+      expect((b as Text).text).toBe('Hello bold and italic text');
+      expect((b as Text).segments).toHaveLength(5);
+      const diffs = comparePrimitives(a, b);
+      expect(diffs).toEqual([]);
+    });
+
+    it('roundtrips nested frame tree', () => {
+      const dsl = `
+        <Frame layoutMode="vertical" gap={24} width={1920} height={1080} fill="#ffffff">
+          <Frame layoutMode="horizontal" gap={16}>
+            <Rectangle width={100} height={100} fill="#FF0000" cornerRadius={8} />
+            <Text fontSize={24} fontWeight={700}>Title</Text>
+          </Frame>
+          <Text fontSize={16} fill="#666666">Description text</Text>
+        </Frame>
+      `;
+      const a = parseDSL(dsl);
+      const serialized = serializeDSL(a);
+      const b = parseDSL(serialized);
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs).toEqual([]);
+    });
+
+    it('roundtrips Frame with effects and constraints', () => {
+      const dsl = '<Frame width={200} height={200} effects={[{"type":"drop-shadow","color":"#00000040","offset":{"x":0,"y":4},"blur":8}]} constraintH="stretch" constraintV="center" />';
+      const a = parseDSL(dsl);
+      const serialized = serializeDSL(a);
+      const b = parseDSL(serialized);
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs).toEqual([]);
+    });
+
+    it('roundtrips BooleanOperation with children', () => {
+      const dsl = `
+        <BooleanOperation operation="subtract" fill="#FF0000">
+          <Rectangle width={100} height={100} />
+          <Ellipse width={60} height={60} x={20} y={20} />
+        </BooleanOperation>
+      `;
+      const a = parseDSL(dsl);
+      const serialized = serializeDSL(a);
+      const b = parseDSL(serialized);
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs).toEqual([]);
+    });
+
+    it('roundtrips Text with lineHeight and letterSpacing', () => {
+      const dsl = '<Text fontSize={16} lineHeight="150%" letterSpacing={1.5}>Hello</Text>';
+      const a = parseDSL(dsl);
+      const serialized = serializeDSL(a);
+      const b = parseDSL(serialized);
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs).toEqual([]);
+    });
+  });
+
+  describe('comparePrimitives', () => {
+    it('finds no diffs for identical primitives', () => {
+      const a = parseDSL('<Frame width={100} height={200} fill="#FF0000" />');
+      const b = parseDSL('<Frame width={100} height={200} fill="#FF0000" />');
+
+      expect(comparePrimitives(a, b)).toEqual([]);
+    });
+
+    it('detects property value difference', () => {
+      const a = parseDSL('<Frame width={100} height={200} />');
+      const b = parseDSL('<Frame width={100} height={300} />');
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs).toHaveLength(1);
+      expect(diffs[0]).toMatchObject({ path: 'height', expected: 200, actual: 300 });
+    });
+
+    it('detects missing property', () => {
+      const a = parseDSL('<Frame width={100} height={200} fill="#FF0000" />');
+      const b = parseDSL('<Frame width={100} height={200} />');
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs.some((d) => d.path === 'fill')).toBe(true);
+    });
+
+    it('detects child count difference', () => {
+      const a = parseDSL('<Frame><Text>A</Text></Frame>');
+      const b = parseDSL('<Frame><Text>A</Text><Text>B</Text></Frame>');
+
+      const diffs = comparePrimitives(a, b);
+      expect(diffs.some((d) => d.path === 'children.length')).toBe(true);
     });
   });
 });

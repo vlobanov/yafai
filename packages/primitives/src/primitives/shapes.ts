@@ -1,6 +1,6 @@
 /**
- * Shape primitives - Rectangle, Ellipse, Vector
- * Maps to Figma's RectangleNode, EllipseNode, VectorNode
+ * Shape primitives - Rectangle, Ellipse, Vector, Line, Star, Polygon, BooleanOperation
+ * Maps to Figma's shape nodes
  */
 
 import type { HexColor, Paint } from '../colors.js';
@@ -23,6 +23,15 @@ export interface ShapeProps {
 
   /** Stroke weight */
   strokeWeight?: number;
+
+  /** Per-side stroke weights (Figma supports individual side weights on frames/shapes) */
+  strokeTopWeight?: number;
+  strokeRightWeight?: number;
+  strokeBottomWeight?: number;
+  strokeLeftWeight?: number;
+
+  /** Stroke alignment: inside, outside, or center */
+  strokeAlign?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -157,6 +166,118 @@ export function createImage(props: Partial<Omit<Image, 'type'>> = {}): Image {
     visible: true,
     opacity: 1,
     scaleMode: 'fill',
+    ...props,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LINE
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Line primitive - represents a straight line.
+ * Length = width, thickness = strokeWeight.
+ */
+export interface Line extends BaseNode, ShapeProps {
+  type: 'line';
+}
+
+export function createLine(props: Partial<Omit<Line, 'type'>> = {}): Line {
+  return {
+    type: 'line',
+    visible: true,
+    opacity: 1,
+    ...props,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STAR
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface StarProps extends ShapeProps {
+  /** Number of points (default 5) */
+  pointCount?: number;
+
+  /** Inner radius ratio 0-1 */
+  innerRadius?: number;
+
+  /** Corner radius */
+  cornerRadius?: CornerRadius;
+}
+
+export interface Star extends BaseNode, StarProps {
+  type: 'star';
+}
+
+export function createStar(props: Partial<Omit<Star, 'type'>> = {}): Star {
+  return {
+    type: 'star',
+    visible: true,
+    opacity: 1,
+    ...props,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POLYGON
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface PolygonProps extends ShapeProps {
+  /** Number of sides (default 3 = triangle) */
+  pointCount?: number;
+
+  /** Corner radius */
+  cornerRadius?: CornerRadius;
+}
+
+export interface Polygon extends BaseNode, PolygonProps {
+  type: 'polygon';
+}
+
+export function createPolygon(
+  props: Partial<Omit<Polygon, 'type'>> = {},
+): Polygon {
+  return {
+    type: 'polygon',
+    visible: true,
+    opacity: 1,
+    ...props,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOOLEAN OPERATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type BooleanOp = 'union' | 'subtract' | 'intersect' | 'exclude';
+
+export interface BooleanOperationProps extends ShapeProps {
+  /** Boolean operation type */
+  operation: BooleanOp;
+}
+
+export interface BooleanOperation extends BaseNode, BooleanOperationProps {
+  type: 'boolean-operation';
+
+  /** Child shapes to combine */
+  children: AnyPrimitive[];
+}
+
+// Forward reference
+type AnyPrimitive = unknown;
+
+export function createBooleanOperation(
+  operation: BooleanOp,
+  children: AnyPrimitive[],
+  props: Partial<Omit<BooleanOperation, 'type' | 'operation' | 'children'>> = {},
+): BooleanOperation {
+  return {
+    type: 'boolean-operation',
+    operation,
+    children,
+    visible: true,
+    opacity: 1,
     ...props,
   };
 }

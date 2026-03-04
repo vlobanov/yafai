@@ -5,11 +5,28 @@
  * It converts XML like <Frame fill="#fff">...</Frame> to Primitive objects.
  */
 
-import type { Frame } from './primitives/frame.js';
+import type { Constraints } from './layout.js';
+import type { Frame, CornerRadius } from './primitives/frame.js';
 import type { Group } from './primitives/group.js';
 import type { Primitive } from './primitives/index.js';
-import type { Ellipse, Image, Rectangle, Vector } from './primitives/shapes.js';
-import type { Text, TextSegment, TextSegmentStyle } from './primitives/text.js';
+import type {
+  ArcData,
+  Ellipse,
+  Image,
+  Rectangle,
+  Vector,
+  Line,
+  Star,
+  Polygon,
+  BooleanOperation,
+} from './primitives/shapes.js';
+import type {
+  Text,
+  TextSegment,
+  TextSegmentStyle,
+  LineHeight,
+  LetterSpacing,
+} from './primitives/text.js';
 
 /**
  * Warning produced during parsing (non-fatal)
@@ -445,12 +462,12 @@ function parseElement(state: ParseState, preserveWhitespace = false): XMLElement
       if (inlineCtx) {
         // Collapse whitespace runs to single space, but don't trim —
         // spaces at boundaries are significant ("Hello " before <B>)
-        const collapsed = rawText.replace(/\s+/g, ' ');
+        const collapsed = unescapeXml(rawText.replace(/\s+/g, ' '));
         if (collapsed) {
           children.push(collapsed);
         }
       } else {
-        const trimmed = rawText.trim();
+        const trimmed = unescapeXml(rawText.trim());
         if (trimmed) {
           children.push(trimmed);
         }
@@ -474,20 +491,30 @@ const BASE_ATTRS = [
   'name',
   'visible',
   'opacity',
+  'locked',
+  'blendMode',
+  'effects',
   'x',
   'y',
+  'rotation',
   'width',
   'height',
-  'rotation',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
+  'constraintH',
+  'constraintV',
 ];
+
+const SHAPE_ATTRS = ['fill', 'fills', 'stroke', 'strokeWeight', 'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight', 'strokeAlign'];
 
 const KNOWN_ATTRIBUTES: Record<string, Set<string>> = {
   frame: new Set([
     ...BASE_ATTRS,
-    'fill',
-    'stroke',
-    'strokeWeight',
+    ...SHAPE_ATTRS,
     'cornerRadius',
+    'cornerSmoothing',
     'layoutMode',
     'gap',
     'itemSpacing',
@@ -502,6 +529,7 @@ const KNOWN_ATTRIBUTES: Record<string, Set<string>> = {
     'counterAxisSizing',
     'layoutWrap',
     'clipsContent',
+    'overflow',
   ]),
   text: new Set([
     ...BASE_ATTRS,
@@ -510,33 +538,34 @@ const KNOWN_ATTRIBUTES: Record<string, Set<string>> = {
     'fontSize',
     'fontWeight',
     'fontStyle',
-    'textAlign',
-    'textAlignVertical',
-    'fill',
     'lineHeight',
     'letterSpacing',
+    'paragraphSpacing',
+    'paragraphIndent',
+    'textAlign',
+    'textAlignVertical',
     'textAutoResize',
+    'maxLines',
     'textDecoration',
     'textCase',
-    'maxLines',
+    'fill',
+    'fills',
     'stroke',
     'strokeWeight',
   ]),
   rectangle: new Set([
     ...BASE_ATTRS,
-    'fill',
-    'stroke',
-    'strokeWeight',
+    ...SHAPE_ATTRS,
     'cornerRadius',
+    'cornerSmoothing',
   ]),
-  ellipse: new Set([...BASE_ATTRS, 'fill', 'stroke', 'strokeWeight']),
+  ellipse: new Set([...BASE_ATTRS, ...SHAPE_ATTRS, 'arcData']),
   vector: new Set([
     ...BASE_ATTRS,
+    ...SHAPE_ATTRS,
     'path',
     'svg',
-    'fill',
-    'stroke',
-    'strokeWeight',
+    'windingRule',
   ]),
   image: new Set([
     ...BASE_ATTRS,
@@ -545,7 +574,42 @@ const KNOWN_ATTRIBUTES: Record<string, Set<string>> = {
     'scaleMode',
     'cornerRadius',
   ]),
-  group: new Set(['id', 'name', 'visible', 'opacity', 'x', 'y']),
+  group: new Set([
+    'id',
+    'name',
+    'visible',
+    'opacity',
+    'locked',
+    'blendMode',
+    'effects',
+    'x',
+    'y',
+    'rotation',
+  ]),
+  line: new Set([...BASE_ATTRS, ...SHAPE_ATTRS]),
+  star: new Set([
+    ...BASE_ATTRS,
+    ...SHAPE_ATTRS,
+    'pointCount',
+    'innerRadius',
+    'cornerRadius',
+  ]),
+  polygon: new Set([
+    ...BASE_ATTRS,
+    ...SHAPE_ATTRS,
+    'pointCount',
+    'cornerRadius',
+  ]),
+  'boolean-operation': new Set([
+    ...BASE_ATTRS,
+    ...SHAPE_ATTRS,
+    'operation',
+  ]),
+  booleanoperation: new Set([
+    ...BASE_ATTRS,
+    ...SHAPE_ATTRS,
+    'operation',
+  ]),
   slide: new Set(['id', 'name', 'x', 'y', 'fill', 'background']),
   slidetitle: new Set([
     'id',
@@ -661,6 +725,16 @@ function elementToPrimitive(
     case 'group':
       return parseGroup(element, warnings);
 
+    case 'line':
+      return parseLine(element);
+    case 'star':
+      return parseStar(element);
+    case 'polygon':
+      return parsePolygon(element);
+    case 'boolean-operation':
+    case 'booleanoperation':
+      return parseBooleanOperation(element, warnings);
+
     // High-level components (expand to primitives)
     case 'slide':
       return parseSlide(element, warnings);
@@ -686,6 +760,10 @@ function elementToPrimitive(
         'Vector',
         'Image',
         'Group',
+        'Line',
+        'Star',
+        'Polygon',
+        'BooleanOperation',
         'Slide',
         'SlideTitle',
         'Card',
@@ -721,6 +799,113 @@ function parseSizeValue(
   return Number.isNaN(num) ? undefined : num;
 }
 
+/**
+ * Parse a JSON value from a {…} attribute.
+ * Returns undefined if the value is not valid JSON.
+ */
+function parseJSON<T = unknown>(value: string | undefined): T | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Parse lineHeight: number | "150%" | "auto"
+ */
+function parseLineHeightValue(
+  value: string | undefined,
+): LineHeight | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'auto') return 'auto';
+  if (value.endsWith('%')) return value as `${number}%`;
+  const num = Number.parseFloat(value);
+  return Number.isNaN(num) ? undefined : num;
+}
+
+/**
+ * Parse letterSpacing: number | "5%"
+ */
+function parseLetterSpacingValue(
+  value: string | undefined,
+): LetterSpacing | undefined {
+  if (value === undefined) return undefined;
+  if (value.endsWith('%')) return value as `${number}%`;
+  const num = Number.parseFloat(value);
+  return Number.isNaN(num) ? undefined : num;
+}
+
+/**
+ * Parse cornerRadius: number | [TL,TR,BR,BL]
+ */
+function parseCornerRadiusValue(
+  value: string | undefined,
+): CornerRadius | undefined {
+  if (value === undefined) return undefined;
+  // Try as JSON array first (e.g. [8,8,0,0])
+  if (value.startsWith('[')) {
+    const arr = parseJSON<number[]>(value);
+    if (arr && Array.isArray(arr) && arr.length === 4) {
+      return arr as [number, number, number, number];
+    }
+  }
+  const num = Number.parseFloat(value);
+  return Number.isNaN(num) ? undefined : num;
+}
+
+/**
+ * Parse constraints from constraintH/constraintV attributes
+ */
+function parseConstraints(
+  h: string | undefined,
+  v: string | undefined,
+): Constraints | undefined {
+  if (!h && !v) return undefined;
+  return {
+    horizontal: (h as Constraints['horizontal']) || 'left',
+    vertical: (v as Constraints['vertical']) || 'top',
+  };
+}
+
+/**
+ * Parse effects from a JSON array attribute
+ */
+function parseEffects(value: string | undefined): any[] | undefined {
+  if (value === undefined) return undefined;
+  return parseJSON<any[]>(value);
+}
+
+/**
+ * Parse fills from a JSON array attribute
+ */
+function parseFills(value: string | undefined): any[] | undefined {
+  if (value === undefined) return undefined;
+  return parseJSON<any[]>(value);
+}
+
+/**
+ * Parse stroke: if starts with { treat as JSON Stroke object, else hex string
+ */
+function parseStrokeValue(
+  value: string | undefined,
+): string | { color?: string; weight: number } | undefined {
+  if (value === undefined) return undefined;
+  if (value.startsWith('{')) {
+    return parseJSON(value);
+  }
+  return value; // hex string
+}
+
+/**
+ * Parse arcData from JSON object attribute
+ */
+function parseArcDataValue(value: string | undefined): ArcData | undefined {
+  if (value === undefined) return undefined;
+  return parseJSON<ArcData>(value);
+}
+
 function parseFrame(
   element: XMLElement,
   warnings?: ParseWarning[],
@@ -729,19 +914,40 @@ function parseFrame(
 
   const frame: Frame = {
     type: 'frame',
+    // BaseProps
     id: attrs.id,
     name: attrs.name,
     visible: parseBoolean(attrs.visible),
     opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    // PositionProps
     x: parseNumber(attrs.x),
     y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    // SizeProps
     width: parseSizeValue(attrs.width),
     height: parseSizeValue(attrs.height),
-    rotation: parseNumber(attrs.rotation),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    // ConstraintProps
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    // FrameProps — fills & strokes
     fill: attrs.fill,
-    stroke: attrs.stroke,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
     strokeWeight: parseNumber(attrs.strokeWeight),
-    cornerRadius: parseNumber(attrs.cornerRadius),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+    // FrameProps — corner radius
+    cornerRadius: parseCornerRadiusValue(attrs.cornerRadius),
+    cornerSmoothing: parseNumber(attrs.cornerSmoothing),
+    // FrameProps — auto-layout
     layoutMode: attrs.layoutMode as any,
     gap: parseNumber(attrs.gap) ?? parseNumber(attrs.itemSpacing),
     padding: parseNumber(attrs.padding),
@@ -754,7 +960,9 @@ function parseFrame(
     primaryAxisSizing: attrs.primaryAxisSizing as Frame['primaryAxisSizing'],
     counterAxisSizing: attrs.counterAxisSizing as Frame['counterAxisSizing'],
     layoutWrap: attrs.layoutWrap as Frame['layoutWrap'],
+    // FrameProps — clipping & overflow
     clipsContent: parseBoolean(attrs.clipsContent),
+    overflow: attrs.overflow as any,
   };
 
   // Parse children
@@ -908,22 +1116,55 @@ function parseText(element: XMLElement): Text {
 
   return {
     type: 'text',
+    // BaseProps
     id: attrs.id,
     name: attrs.name,
     visible: parseBoolean(attrs.visible),
     opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    // PositionProps
     x: parseNumber(attrs.x),
     y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    // SizeProps
     width: parseSizeValue(attrs.width),
     height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    // ConstraintProps
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    // TextProps — content
     text: textContent,
+    // TextProps — typography
     fontFamily: attrs.fontFamily,
     fontSize: parseNumber(attrs.fontSize),
     fontWeight: parseNumber(attrs.fontWeight) as any,
     fontStyle: attrs.fontStyle as any,
+    lineHeight: parseLineHeightValue(attrs.lineHeight),
+    letterSpacing: parseLetterSpacingValue(attrs.letterSpacing),
+    paragraphSpacing: parseNumber(attrs.paragraphSpacing),
+    paragraphIndent: parseNumber(attrs.paragraphIndent),
+    // TextProps — alignment & layout
     textAlign: attrs.textAlign as any,
     textAlignVertical: attrs.textAlignVertical as any,
+    textAutoResize: attrs.textAutoResize as any,
+    maxLines: parseNumber(attrs.maxLines),
+    // TextProps — decoration & transforms
+    textDecoration: attrs.textDecoration as any,
+    textCase: attrs.textCase as any,
+    // TextProps — fills & strokes
     fill: attrs.fill,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
+    strokeWeight: parseNumber(attrs.strokeWeight),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
     segments,
   };
 }
@@ -933,18 +1174,39 @@ function parseRectangle(element: XMLElement): Rectangle {
 
   return {
     type: 'rectangle',
+    // BaseProps
     id: attrs.id,
     name: attrs.name,
     visible: parseBoolean(attrs.visible),
     opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    // PositionProps
     x: parseNumber(attrs.x),
     y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    // SizeProps
     width: parseSizeValue(attrs.width),
     height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    // ConstraintProps
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    // ShapeProps
     fill: attrs.fill,
-    stroke: attrs.stroke,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
     strokeWeight: parseNumber(attrs.strokeWeight),
-    cornerRadius: parseNumber(attrs.cornerRadius),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+    // RectangleProps
+    cornerRadius: parseCornerRadiusValue(attrs.cornerRadius),
+    cornerSmoothing: parseNumber(attrs.cornerSmoothing),
   };
 }
 
@@ -953,17 +1215,38 @@ function parseEllipse(element: XMLElement): Ellipse {
 
   return {
     type: 'ellipse',
+    // BaseProps
     id: attrs.id,
     name: attrs.name,
     visible: parseBoolean(attrs.visible),
     opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    // PositionProps
     x: parseNumber(attrs.x),
     y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    // SizeProps
     width: parseSizeValue(attrs.width),
     height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    // ConstraintProps
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    // ShapeProps
     fill: attrs.fill,
-    stroke: attrs.stroke,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
     strokeWeight: parseNumber(attrs.strokeWeight),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+    // EllipseProps
+    arcData: parseArcDataValue(attrs.arcData),
   };
 }
 
@@ -972,19 +1255,40 @@ function parseVector(element: XMLElement): Vector {
 
   return {
     type: 'vector',
+    // BaseProps
     id: attrs.id,
     name: attrs.name,
     visible: parseBoolean(attrs.visible),
     opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    // PositionProps
     x: parseNumber(attrs.x),
     y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    // SizeProps
     width: parseSizeValue(attrs.width),
     height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    // ConstraintProps
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    // ShapeProps
+    fill: attrs.fill,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
+    strokeWeight: parseNumber(attrs.strokeWeight),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+    // VectorProps
     path: attrs.path,
     svg: attrs.svg,
-    fill: attrs.fill,
-    stroke: attrs.stroke,
-    strokeWeight: parseNumber(attrs.strokeWeight),
+    windingRule: attrs.windingRule as any,
   };
 }
 
@@ -993,18 +1297,32 @@ function parseImage(element: XMLElement): Image {
 
   return {
     type: 'image',
+    // BaseProps
     id: attrs.id,
     name: attrs.name,
     visible: parseBoolean(attrs.visible),
     opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    // PositionProps
     x: parseNumber(attrs.x),
     y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    // SizeProps
     width: parseSizeValue(attrs.width),
     height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    // ConstraintProps
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    // ImageProps
     imageRef: attrs.imageRef,
     src: attrs.src,
     scaleMode: attrs.scaleMode as any,
-    cornerRadius: parseNumber(attrs.cornerRadius),
+    cornerRadius: parseCornerRadiusValue(attrs.cornerRadius),
   };
 }
 
@@ -1020,8 +1338,156 @@ function parseGroup(
     name: attrs.name,
     visible: parseBoolean(attrs.visible),
     opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
     x: parseNumber(attrs.x),
     y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    children: element.children
+      .filter((c): c is XMLElement => typeof c !== 'string')
+      .map((c) => elementToPrimitive(c, warnings)),
+  };
+}
+
+function parseLine(element: XMLElement): Line {
+  const attrs = element.attributes;
+
+  return {
+    type: 'line',
+    id: attrs.id,
+    name: attrs.name,
+    visible: parseBoolean(attrs.visible),
+    opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    x: parseNumber(attrs.x),
+    y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    width: parseSizeValue(attrs.width),
+    height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    fill: attrs.fill,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
+    strokeWeight: parseNumber(attrs.strokeWeight),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+  };
+}
+
+function parseStar(element: XMLElement): Star {
+  const attrs = element.attributes;
+
+  return {
+    type: 'star',
+    id: attrs.id,
+    name: attrs.name,
+    visible: parseBoolean(attrs.visible),
+    opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    x: parseNumber(attrs.x),
+    y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    width: parseSizeValue(attrs.width),
+    height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    fill: attrs.fill,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
+    strokeWeight: parseNumber(attrs.strokeWeight),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+    pointCount: parseNumber(attrs.pointCount),
+    innerRadius: parseNumber(attrs.innerRadius),
+    cornerRadius: parseCornerRadiusValue(attrs.cornerRadius),
+  };
+}
+
+function parsePolygon(element: XMLElement): Polygon {
+  const attrs = element.attributes;
+
+  return {
+    type: 'polygon',
+    id: attrs.id,
+    name: attrs.name,
+    visible: parseBoolean(attrs.visible),
+    opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    x: parseNumber(attrs.x),
+    y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    width: parseSizeValue(attrs.width),
+    height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    fill: attrs.fill,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
+    strokeWeight: parseNumber(attrs.strokeWeight),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+    pointCount: parseNumber(attrs.pointCount),
+    cornerRadius: parseCornerRadiusValue(attrs.cornerRadius),
+  };
+}
+
+function parseBooleanOperation(
+  element: XMLElement,
+  warnings?: ParseWarning[],
+): BooleanOperation {
+  const attrs = element.attributes;
+
+  return {
+    type: 'boolean-operation',
+    id: attrs.id,
+    name: attrs.name,
+    visible: parseBoolean(attrs.visible),
+    opacity: parseNumber(attrs.opacity),
+    locked: parseBoolean(attrs.locked),
+    blendMode: attrs.blendMode as any,
+    effects: parseEffects(attrs.effects),
+    x: parseNumber(attrs.x),
+    y: parseNumber(attrs.y),
+    rotation: parseNumber(attrs.rotation),
+    width: parseSizeValue(attrs.width),
+    height: parseSizeValue(attrs.height),
+    minWidth: parseNumber(attrs.minWidth),
+    maxWidth: parseNumber(attrs.maxWidth),
+    minHeight: parseNumber(attrs.minHeight),
+    maxHeight: parseNumber(attrs.maxHeight),
+    constraints: parseConstraints(attrs.constraintH, attrs.constraintV),
+    fill: attrs.fill,
+    fills: parseFills(attrs.fills),
+    stroke: parseStrokeValue(attrs.stroke),
+    strokeWeight: parseNumber(attrs.strokeWeight),
+    strokeTopWeight: parseNumber(attrs.strokeTopWeight),
+    strokeRightWeight: parseNumber(attrs.strokeRightWeight),
+    strokeBottomWeight: parseNumber(attrs.strokeBottomWeight),
+    strokeLeftWeight: parseNumber(attrs.strokeLeftWeight),
+    operation: (attrs.operation as BooleanOperation['operation']) || 'union',
     children: element.children
       .filter((c): c is XMLElement => typeof c !== 'string')
       .map((c) => elementToPrimitive(c, warnings)),
@@ -1315,8 +1781,11 @@ export function serializeDSL(primitive: Primitive, indent = 0): string {
  * Get the XML tag name for a primitive type
  */
 function getTagName(type: string): string {
-  // Capitalize first letter
-  return type.charAt(0).toUpperCase() + type.slice(1);
+  // Handle hyphenated names like "boolean-operation" → "BooleanOperation"
+  return type
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('');
 }
 
 /**
@@ -1329,6 +1798,14 @@ function serializeAttributes(primitive: Primitive): string {
   for (const [key, value] of Object.entries(primitive)) {
     if (key === 'type' || key === 'children' || key === 'text' || key === 'segments') continue;
     if (value === undefined || value === null) continue;
+
+    // Special-case: constraints → split into constraintH/constraintV
+    if (key === 'constraints' && typeof value === 'object') {
+      const c = value as Constraints;
+      if (c.horizontal) attrs.push(`constraintH="${c.horizontal}"`);
+      if (c.vertical) attrs.push(`constraintV="${c.vertical}"`);
+      continue;
+    }
 
     const attrValue = serializeAttributeValue(value);
     if (attrValue !== null) {
@@ -1355,6 +1832,9 @@ function serializeAttributeValue(value: unknown): string | null {
   if (Array.isArray(value)) {
     return `{${JSON.stringify(value)}}`;
   }
+  if (typeof value === 'object' && value !== null) {
+    return `{${JSON.stringify(value)}}`;
+  }
   return null;
 }
 
@@ -1367,6 +1847,24 @@ function escapeXml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/**
+ * Decode XML entities: &amp; &lt; &gt; &quot; &apos; and numeric refs &#xHH; &#DDD;
+ */
+function unescapeXml(str: string): string {
+  return str.replace(/&(#x([0-9a-fA-F]+)|#(\d+)|amp|lt|gt|quot|apos);/g, (match, _entity, hex, dec) => {
+    if (hex) return String.fromCodePoint(Number.parseInt(hex, 16));
+    if (dec) return String.fromCodePoint(Number.parseInt(dec, 10));
+    switch (match) {
+      case '&amp;': return '&';
+      case '&lt;': return '<';
+      case '&gt;': return '>';
+      case '&quot;': return '"';
+      case '&apos;': return "'";
+      default: return match;
+    }
+  });
 }
 
 /**

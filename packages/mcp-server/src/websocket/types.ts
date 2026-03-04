@@ -39,11 +39,32 @@ export interface SelectionSnapshotRequestMessage {
   requestId: string;
 }
 
+export interface SelectionDslRequestMessage {
+  type: 'selection:dsl:request';
+  requestId: string;
+}
+
+export interface GetNodeRequestMessage {
+  type: 'node:get:request';
+  requestId: string;
+  nodeId: string;
+}
+
+export interface UpdateNodeRequestMessage {
+  type: 'node:update:request';
+  requestId: string;
+  nodeId: string;
+  properties: Record<string, unknown>;
+}
+
 export type ServerToPluginMessage =
   | RenderSlideMessage
   | SnapshotRequestMessage
   | SelectionHtmlRequestMessage
-  | SelectionSnapshotRequestMessage;
+  | SelectionSnapshotRequestMessage
+  | SelectionDslRequestMessage
+  | GetNodeRequestMessage
+  | UpdateNodeRequestMessage;
 
 // ============================================================================
 // Plugin -> Server
@@ -91,10 +112,43 @@ export interface SelectionSnapshotResultMessage {
   error?: string;
 }
 
+export interface SelectionDslResultMessage {
+  type: 'selection:dsl:result';
+  requestId: string;
+  success: boolean;
+  dsl?: string;
+  nodeCount?: number;
+  error?: string;
+}
+
+export interface GetNodeResultMessage {
+  type: 'node:get:result';
+  requestId: string;
+  success: boolean;
+  dsl?: string;
+  nodeId?: string;
+  nodeName?: string;
+  nodeType?: string;
+  error?: string;
+}
+
+export interface UpdateNodeResultMessage {
+  type: 'node:update:result';
+  requestId: string;
+  success: boolean;
+  nodeId?: string;
+  updatedProperties?: string[];
+  dsl?: string;
+  error?: string;
+}
+
 export type PluginToServerMessage =
   | PluginReadyMessage
   | RenderResultMessage
   | ValidationResultMessage
   | SnapshotResultMessage
   | SelectionHtmlResultMessage
-  | SelectionSnapshotResultMessage;
+  | SelectionSnapshotResultMessage
+  | SelectionDslResultMessage
+  | GetNodeResultMessage
+  | UpdateNodeResultMessage;

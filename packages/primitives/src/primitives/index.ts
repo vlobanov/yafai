@@ -11,7 +11,16 @@ export * from './text.js';
 // Re-import for union type
 import type { Frame } from './frame.js';
 import type { Group } from './group.js';
-import type { Ellipse, Image, Rectangle, Vector } from './shapes.js';
+import type {
+  BooleanOperation,
+  Ellipse,
+  Image,
+  Line,
+  Polygon,
+  Rectangle,
+  Star,
+  Vector,
+} from './shapes.js';
 import type { Text } from './text.js';
 
 /**
@@ -24,12 +33,16 @@ export type Primitive =
   | Ellipse
   | Vector
   | Image
-  | Group;
+  | Group
+  | Line
+  | Star
+  | Polygon
+  | BooleanOperation;
 
 /**
  * Primitives that can contain children
  */
-export type ContainerPrimitive = Frame | Group;
+export type ContainerPrimitive = Frame | Group | BooleanOperation;
 
 /**
  * Type guard for Frame
@@ -49,16 +62,25 @@ export function isText(node: Primitive): node is Text {
  * Type guard for container primitives
  */
 export function isContainer(node: Primitive): node is ContainerPrimitive {
-  return node.type === 'frame' || node.type === 'group';
+  return (
+    node.type === 'frame' ||
+    node.type === 'group' ||
+    node.type === 'boolean-operation'
+  );
 }
 
 /**
  * Type guard for shapes
  */
-export function isShape(node: Primitive): node is Rectangle | Ellipse | Vector {
+export function isShape(
+  node: Primitive,
+): node is Rectangle | Ellipse | Vector | Line | Star | Polygon {
   return (
     node.type === 'rectangle' ||
     node.type === 'ellipse' ||
-    node.type === 'vector'
+    node.type === 'vector' ||
+    node.type === 'line' ||
+    node.type === 'star' ||
+    node.type === 'polygon'
   );
 }

@@ -11,7 +11,7 @@ import type {
   Rectangle,
   Vector,
 } from '@yafai/primitives';
-import { fillsFromColor } from '../colors.js';
+import { fillsFromColor, primitiveToFigmaPaint } from '../colors.js';
 import { effectsToFigma } from '../effects.js';
 import type { RenderContext } from '../types.js';
 
@@ -19,32 +19,8 @@ import type { RenderContext } from '../types.js';
  * Apply common properties to a shape node
  */
 function applyBaseProps(
-  node: SceneNode & {
-    fills?: readonly Paint[] | typeof figma.mixed;
-    strokes?: readonly Paint[];
-    strokeWeight?: number;
-    effects?: readonly Effect[];
-    opacity?: number;
-    visible?: boolean;
-    locked?: boolean;
-    x?: number;
-    y?: number;
-    rotation?: number;
-  },
-  props: {
-    id?: string;
-    name?: string;
-    visible?: boolean;
-    opacity?: number;
-    locked?: boolean;
-    x?: number;
-    y?: number;
-    rotation?: number;
-    fill?: string;
-    stroke?: string | { color?: string; weight: number };
-    strokeWeight?: number;
-    effects?: Effect[];
-  },
+  node: any,
+  props: any,
 ): void {
   if (props.name || props.id) node.name = (props.name || props.id)!;
   if (props.visible !== undefined) node.visible = props.visible;
@@ -57,7 +33,9 @@ function applyBaseProps(
 
   // Fill
   if (props.fill && 'fills' in node) {
-    (node as any).fills = fillsFromColor(props.fill);
+    node.fills = fillsFromColor(props.fill);
+  } else if (props.fills && 'fills' in node) {
+    node.fills = props.fills.map(primitiveToFigmaPaint);
   }
 
   // Stroke
@@ -70,14 +48,14 @@ function applyBaseProps(
         : props.stroke.weight;
 
     if (strokeColor) {
-      (node as any).strokes = fillsFromColor(strokeColor);
-      (node as any).strokeWeight = strokeWeight;
+      node.strokes = fillsFromColor(strokeColor);
+      node.strokeWeight = strokeWeight;
     }
   }
 
   // Effects
   if (props.effects && props.effects.length > 0 && 'effects' in node) {
-    (node as any).effects = effectsToFigma(props.effects);
+    node.effects = effectsToFigma(props.effects);
   }
 }
 
